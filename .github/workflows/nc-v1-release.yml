@@ -1,4 +1,4 @@
-name: Nosso Combinado — Android V1.3.0
+name: Nosso Combinado — Android V1.4.0
 on:
   push:
     branches: [nosso-combinado-v1-release]
@@ -38,7 +38,7 @@ jobs:
           base64 --decode nosso-combinado/release-v1-source.tar.gz.b64 | tar -xzf - -C android-v1
           test -f android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
           test -f android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
-          grep -q 'versionName .1.3.0.' android-v1/app/build.gradle
+          grep -q 'versionName .1.4.0.' android-v1/app/build.gradle
           grep -q 'c.getIV()' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
           ! grep -q 'init(Cipher.ENCRYPT_MODE,key(),new GCMParameterSpec' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
       - name: Compilar pacote Android
