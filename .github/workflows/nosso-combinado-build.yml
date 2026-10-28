@@ -33,10 +33,10 @@ jobs:
       - name: Extrair projeto Android
         run: |
           mkdir -p nc-build
-          base64 --decode nosso-combinado/android-integrado.tar.xz.b64 | tar --extract --xz --file - --directory nc-build
+          base64 --decode nosso-combinado/android-native.tar.gz.b64 | tar --extract --gzip --file - --directory nc-build
           test -f nc-build/app/src/main/AndroidManifest.xml
-          test -f nc-build/app/src/main/assets/web/index.html
-          test -f nc-build/app/src/main/assets/web/js/main.js
+          test -f nc-build/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          test -f nc-build/app/src/main/java/com/nossocombinado/app/OfflineDb.java
       - name: Compilar APK debug assinado
         run: cd nc-build && gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Validar pacote e assinatura
