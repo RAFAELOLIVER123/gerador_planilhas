@@ -1,0 +1,67 @@
+name: Nosso Combinado - APK Android instalavel
+on:
+  push:
+    branches: [nosso-combinado-build]
+    paths:
+      - 'nosso-combinado/**'
+      - '.github/workflows/nosso-combinado-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ler fontes do projeto
+        uses: actions/checkout@v4
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Instalar SDK Android
+        uses: android-actions/setup-android@v3
+      - name: Instalar plataforma e build-tools
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Extrair projeto Android
+        run: |
+          mkdir -p nc-build
+          base64 --decode nosso-combinado/android-source.tar.xz.b64 | tar --extract --xz --file - --directory nc-build
+          test -f nc-build/app/src/main/AndroidManifest.xml
+          test -f nc-build/app/src/main/assets/index.html
+          test -f nc-build/app/src/main/assets/main.js
+      - name: Compilar APK debug assinado
+        run: cd nc-build && gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Validar pacote e assinatura
+        run: |
+          APK=nc-build/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" | tail -1
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E 'package:|sdkVersion:|application-label:'
+          ls -lh "$APK"
+      - name: Disponibilizar APK para download
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nosso-Combinado-APK-instalavel
+          path: nc-build/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Copiar APK para a branch de compilacao
+        continue-on-error: true
+        run: |
+          mkdir -p dist
+          cp nc-build/app/build/outputs/apk/debug/app-debug.apk dist/Nosso-Combinado-Android.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/Nosso-Combinado-Android.apk
+          if ! git diff --cached --quiet; then
+            git commit -m "APK Nosso Combinado compilado com Android SDK"
+            git push origin HEAD:nosso-combinado-build
+          fi
