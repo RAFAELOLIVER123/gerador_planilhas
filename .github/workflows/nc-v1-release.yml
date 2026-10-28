@@ -1,0 +1,66 @@
+name: Nosso Combinado — Android V1.0.0
+on:
+  push:
+    branches: [nosso-combinado-v1-release]
+    paths:
+      - 'nosso-combinado/release-v1-source.tar.gz.b64'
+      - '.github/workflows/nc-v1-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fontes
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Instalar build tools Android
+        shell: bash
+        run: |
+          SDKM="$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
+          test -n "$SDKM"
+          "$SDKM" --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Extrair Android nativo
+        shell: bash
+        run: |
+          mkdir -p android-v1
+          base64 --decode nosso-combinado/release-v1-source.tar.gz.b64 | tar -xzf - -C android-v1
+          test -f android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+          test -f android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'versionName .1.0.0.' android-v1/app/build.gradle
+          grep -q 'c.getIV()' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+          ! grep -q 'init(Cipher.ENCRYPT_MODE,key(),new GCMParameterSpec' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+      - name: Compilar pacote Android
+        run: cd android-v1 && gradle --no-daemon :app:assembleDebug
+      - name: Validar compilação
+        shell: bash
+        run: |
+          APK=android-v1/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" | tail -1
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E 'package:|sdkVersion:|application-label:'
+          ls -lh "$APK"
+      - name: APK compilado — assinatura provisória
+        uses: actions/upload-artifact@v4
+        with:
+          name: NossoCombinado-V1-APK-para-assinatura-privada
+          path: android-v1/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Ferramenta oficial para assinatura privada
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-ApkSigner-Oficial
+          path: /usr/local/lib/android/sdk/build-tools/35.0.0/lib/apksigner.jar
+          if-no-files-found: error
