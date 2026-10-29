@@ -52,6 +52,16 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E 'package:|sdkVersion:|application-label:'
           ls -lh "$APK"
+      - name: Fontes nativas para auditoria de compatibilidade
+        uses: actions/upload-artifact@v4
+        with:
+          name: NossoCombinado-Fontes-Nativos-1-6
+          path: |
+            android-v1/app/src/main
+            android-v1/app/build.gradle
+            android-v1/settings.gradle
+            android-v1/build.gradle
+          retention-days: 3
       - name: APK compilado — assinatura provisória
         uses: actions/upload-artifact@v4
         with:
