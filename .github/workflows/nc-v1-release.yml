@@ -83,7 +83,7 @@ jobs:
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep 'name=\x27com.nossocombinado.app.teste\x27'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste'"
       - name: APK 1.7 de teste sem remover a 1.4
         uses: actions/upload-artifact@v4
         with:
