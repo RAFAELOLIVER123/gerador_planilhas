@@ -3,10 +3,22 @@
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+  <uses-permission android:name="android.permission.WAKE_LOCK"/>
   <application android:allowBackup="false"
      android:usesCleartextTraffic="false"
      android:label="Nosso Combinado" android:icon="@drawable/app_icon"
      android:theme="@android:style/Theme.Material.Light.NoActionBar">
+     <receiver android:name=".AlarmReceiver" android:exported="false"/>
+     <receiver android:name=".BootReceiver" android:exported="false">
+       <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter>
+     </receiver>
+     <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="mediaPlayback"/>
+     <activity android:name=".AlarmActivity" android:exported="false"/>
      <activity android:name=".MainActivity" android:exported="true"
        android:windowSoftInputMode="adjustResize"
        android:configChanges="orientation|screenSize|keyboardHidden">
