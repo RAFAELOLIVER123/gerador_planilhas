@@ -4,6 +4,7 @@ on:
     branches: [nosso-combinado-nativo30]
     paths:
       - 'nc-native28-patch/**'
+      - 'nc-native29-patch/**'
       - 'nc-native30-patch/**'
       - '.github/workflows/nc-native30.yml'
   workflow_dispatch:
@@ -35,8 +36,8 @@ jobs:
         test -s nc-native30-build/app/src/main/java/com/nossocombinado/app/ApiClient.java
     - name: Aplicar correções nativas 3.0
       run: python3 nc-native28-patch/apply.py nc-native30-build
-    - name: Corrigir login e sincronização 3.0
-      run: python3 nc-native30-patch/apply.py nc-native30-build
+    - name: Corrigir login e sincronização 2.9
+      run: python3 nc-native29-patch/apply.py nc-native30-build
     - name: Habilitar exclusão de mensagens e conversas nativo 3.0
       run: python3 nc-native30-patch/apply.py nc-native30-build
     - name: Gerar audio de alarme original no APK
