@@ -66,6 +66,12 @@ jobs:
           python3 nosso-combinado/nc-native-1-9-patch.py android-v1
           grep -q 'versionCode 190' android-v1/app/build.gradle
           grep -q "versionName '1.9.0'" android-v1/app/build.gradle
+      - name: Integrar identidade, calendário, idiomas e temas v1.9
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-9-patch.py
+          grep -q 'versionCode 190' android-v1/app/build.gradle
+          grep -q "versionName '1.9.0'" android-v1/app/build.gradle
       - name: Compilar pacote Android
         run: cd android-v1 && gradle --no-daemon :app:assembleDebug
       - name: Validar compilação
