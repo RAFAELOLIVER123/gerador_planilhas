@@ -76,7 +76,7 @@ jobs:
       - name: Fontes nativas para auditoria de compatibilidade
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-Fontes-Nativos-1-9
+          name: NossoCombinado-Fontes-Nativos-2-0
           path: |
             android-v1/app/src/main
             android-v1/app/build.gradle
@@ -86,24 +86,24 @@ jobs:
       - name: APK compilado — assinatura provisória
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-V1-9-APK-para-assinatura-privada
+          name: NossoCombinado-V2-0-APK-para-assinatura-privada
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Compilar versão de teste que instala ao lado da 1.4
         shell: bash
         run: |
-          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste19'/" android-v1/app/build.gradle
-          grep -q "applicationId 'com.nossocombinado.app.teste19'" android-v1/app/build.gradle
-          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 1.9"/' android-v1/app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste20'/" android-v1/app/build.gradle
+          grep -q "applicationId 'com.nossocombinado.app.teste20'" android-v1/app/build.gradle
+          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 2.0"/' android-v1/app/src/main/AndroidManifest.xml
           cd android-v1 && gradle --no-daemon :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste19'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste20'"
       - name: APK 1.9 de teste sem remover a 1.4 ou 1.7
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-1-9-TESTE-Instalavel-Lado-a-Lado
+          name: NossoCombinado-2-0-TESTE-Instalavel-Lado-a-Lado
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
