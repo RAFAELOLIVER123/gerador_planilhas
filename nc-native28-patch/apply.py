@@ -86,7 +86,7 @@ change('gap(content,12);LinearLayout controls=card(content);text(controls,"Conta
 main.write_text(s,encoding='utf8')
 g=grad.read_text()
 import re
-for pattern,replacement in [(r"applicationId\\s+['\"]com\\.nossocombinado\\.app['\"]","applicationId 'com.nossocombinado.app.native28'"),(r"versionCode\\s+\\d+","versionCode 280"),(r"versionName\\s+['\"][^'\"]+['\"]","versionName '2.8.0'"),(r"targetSdk\\s+\\d+","targetSdk 33")]:
+for pattern,replacement in [(r"applicationId\s+['\"]com\.nossocombinado\.app['\"]","applicationId 'com.nossocombinado.app.native28'"),(r"versionCode\s+\d+","versionCode 280"),(r"versionName\s+['\"][^'\"]+['\"]","versionName '2.8.0'"),(r"targetSdk\s+\d+","targetSdk 33")]:
  g,n=re.subn(pattern,replacement,g,count=1)
  if n!=1:raise RuntimeError('Gradle missing '+pattern)
 grad.write_text(g)
