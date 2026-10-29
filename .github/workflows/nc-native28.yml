@@ -34,6 +34,8 @@ jobs:
         test -s nc-native28-build/app/src/main/java/com/nossocombinado/app/ApiClient.java
     - name: Aplicar correções nativas 2.8
       run: python3 nc-native28-patch/apply.py nc-native28-build
+    - name: Gerar audio de alarme original no APK
+      run: python3 nc-native28-patch/generate_alarm.py nc-native28-build
     - name: Compilar APK nativo 2.8
       run: gradle --no-daemon -p nc-native28-build :app:assembleDebug
     - name: Inspecionar tamanho e assinatura
