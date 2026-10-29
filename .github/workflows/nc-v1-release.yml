@@ -1,4 +1,4 @@
-name: Nosso Combinado — Android V2.1.0
+name: Nosso Combinado — Android V2.2.0
 on:
   push:
     branches: [nosso-combinado-v1-release]
@@ -8,6 +8,7 @@ on:
       - 'nosso-combinado/nc-native-2-0-patch.py'
       - 'nosso-combinado/nc-native-2-1-patch.py'
       - 'nosso-combinado/nc-native-2-1-files.zip.b64'
+      - 'nosso-combinado/nc-native-2-2-overrides.zip.b64'
       - '.github/workflows/nc-v1-release.yml'
   workflow_dispatch:
 
@@ -73,6 +74,14 @@ jobs:
           grep -q "versionName '2.1.0'" android-v1/app/build.gradle
           test -f android-v1/app/src/main/res/raw/nc_alarm05.wav
           test -f android-v1/app/src/main/res/raw/nc_mensagem.m4a
+      - name: Ativar sons, tarefas no horário, mapa com endereço, fotos e chat rápido — 2.2
+        shell: bash
+        run: |
+          base64 --decode nosso-combinado/nc-native-2-2-overrides.zip.b64 > /tmp/nc-native-2-2.zip
+          unzip -o -q /tmp/nc-native-2-2.zip -d android-v1
+          grep -q 'versionCode 220' android-v1/app/build.gradle
+          grep -q "versionName '2.2.0'" android-v1/app/build.gradle
+          grep -q 'nc_alarm_due_v22' android-v1/app/src/main/java/com/nossocombinado/app/ReminderScheduler.java
       - name: Compilar pacote Android
         run: cd android-v1 && gradle --no-daemon :app:assembleDebug
       - name: Validar compilação
@@ -87,7 +96,7 @@ jobs:
       - name: Fontes nativas para auditoria de compatibilidade
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-Fontes-Nativos-2-1
+          name: NossoCombinado-Fontes-Nativos-2-2
           path: |
             android-v1/app/src/main
             android-v1/app/build.gradle
@@ -97,24 +106,24 @@ jobs:
       - name: APK compilado — assinatura provisória
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-V2-1-APK-para-assinatura-privada
+          name: NossoCombinado-V2-2-APK-para-assinatura-privada
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Compilar versão de teste que instala ao lado da 1.4
         shell: bash
         run: |
-          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste21'/" android-v1/app/build.gradle
-          grep -q "applicationId 'com.nossocombinado.app.teste21'" android-v1/app/build.gradle
-          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 2.1"/' android-v1/app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste22'/" android-v1/app/build.gradle
+          grep -q "applicationId 'com.nossocombinado.app.teste22'" android-v1/app/build.gradle
+          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 2.2"/' android-v1/app/src/main/AndroidManifest.xml
           cd android-v1 && gradle --no-daemon :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste21'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste22'"
       - name: APK 1.9 de teste sem remover a 1.4 ou 1.7
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-2-1-TESTE-Instalavel-Lado-a-Lado
+          name: NossoCombinado-2-2-TESTE-Instalavel-Lado-a-Lado
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
