@@ -3,11 +3,11 @@ android {
   namespace 'com.nossocombinado.app.web25'
   compileSdk 35
   defaultConfig {
-    applicationId 'com.nossocombinado.app.web26'
+    applicationId 'com.nossocombinado.app.web27'
     minSdk 23
     targetSdk 33
-    versionCode 260
-    versionName '2.6.0'
+    versionCode 270
+    versionName '2.7.0'
   }
   buildTypes { release { minifyEnabled false } }
   compileOptions {
