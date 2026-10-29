@@ -1,0 +1,17 @@
+plugins { id 'com.android.application' }
+android {
+  namespace 'com.nossocombinado.app.web25'
+  compileSdk 35
+  defaultConfig {
+    applicationId 'com.nossocombinado.app.web25'
+    minSdk 23
+    targetSdk 33
+    versionCode 250
+    versionName '2.5.0'
+  }
+  buildTypes { release { minifyEnabled false } }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
