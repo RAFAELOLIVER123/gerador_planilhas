@@ -4,6 +4,7 @@ on:
     branches: [nosso-combinado-v1-release]
     paths:
       - 'nosso-combinado/release-v1-source.tar.gz.b64'
+      - 'nosso-combinado/nc-native-1-9-patch.py'
       - '.github/workflows/nc-v1-release.yml'
   workflow_dispatch:
 
