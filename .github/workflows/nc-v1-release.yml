@@ -1,4 +1,4 @@
-name: Nosso Combinado — Android V1.6.0
+name: Nosso Combinado — Android V1.7.0
 on:
   push:
     branches: [nosso-combinado-v1-release]
@@ -41,6 +41,12 @@ jobs:
           grep -q 'versionName .1.6.0.' android-v1/app/build.gradle
           grep -q 'c.getIV()' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
           ! grep -q 'init(Cipher.ENCRYPT_MODE,key(),new GCMParameterSpec' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+      - name: Integrar telas nativas da versão 1.7
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-7-patch.py android-v1
+          grep -q 'versionCode 170' android-v1/app/build.gradle
+          grep -q "versionName '1.7.0'" android-v1/app/build.gradle
       - name: Compilar pacote Android
         run: cd android-v1 && gradle --no-daemon :app:assembleDebug
       - name: Validar compilação
@@ -55,7 +61,7 @@ jobs:
       - name: Fontes nativas para auditoria de compatibilidade
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-Fontes-Nativos-1-6
+          name: NossoCombinado-Fontes-Nativos-1-7
           path: |
             android-v1/app/src/main
             android-v1/app/build.gradle
@@ -65,7 +71,7 @@ jobs:
       - name: APK compilado — assinatura provisória
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-V1-APK-para-assinatura-privada
+          name: NossoCombinado-V1-7-APK-para-assinatura-privada
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Ferramenta oficial para assinatura privada
