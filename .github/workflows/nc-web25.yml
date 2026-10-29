@@ -1,0 +1,53 @@
+name: Nosso Combinado Web 2.5 APK teste
+on:
+  push:
+    branches: [nosso-combinado-web25]
+    paths:
+      - 'nc-android-web25/**'
+      - '.github/workflows/nc-web25.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: SDK Android 35
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build APK 2.5
+        run: gradle --no-daemon -p nc-android-web25 :app:assembleDebug
+      - name: Verificar APK e assinatura
+        run: |
+          APK=nc-android-web25/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" | tail -1
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E 'package:|sdkVersion:|application-label:'
+      - name: Enviar APK ao GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: NossoCombinado_WEB_2_5_TESTE
+          path: nc-android-web25/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+      - name: Publicar APK no repositório
+        run: |
+          mkdir -p nc-android-web25/dist
+          cp nc-android-web25/app/build/outputs/apk/debug/app-debug.apk nc-android-web25/dist/NossoCombinado_WEB_2_5_TESTE.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add nc-android-web25/dist/NossoCombinado_WEB_2_5_TESTE.apk
+          if ! git diff --cached --quiet; then
+             git commit -m "APK Nosso Combinado Web 2.5 teste instalável"
+             git push origin HEAD:nosso-combinado-web25
+          fi
