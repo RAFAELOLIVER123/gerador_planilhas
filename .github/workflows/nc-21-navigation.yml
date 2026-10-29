@@ -10,6 +10,7 @@ on:
       - 'nosso-combinado/nc-native-2-1-files.zip.b64'
       - 'nosso-combinado/nc-21-minimal-patch.py'
       - 'nosso-combinado/nc-21-navigation-patch.py'
+      - 'nosso-combinado/nc-21-map-route-patch.py'
       - 'nosso-combinado/ReminderAlarmService.java'
       - '.github/workflows/nc-21-navigation.yml'
   workflow_dispatch:
@@ -92,6 +93,10 @@ jobs:
           python3 nosso-combinado/nc-21-navigation-patch.py android-v1
           grep -q 'versionCode 212' android-v1/app/build.gradle
           grep -q 'toolCarousel' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Mapa Ruas e rotas de origem a destino usando base original
+        run: |
+          python3 nosso-combinado/nc-21-map-route-patch.py android-v1
+          grep -q 'ncDrawRoute' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
       - name: Compilar pacote Android
         run: cd android-v1 && gradle --no-daemon :app:assembleDebug
       - name: Validar compilação
