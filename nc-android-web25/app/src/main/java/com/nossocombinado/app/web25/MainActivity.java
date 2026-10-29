@@ -1,6 +1,7 @@
 package com.nossocombinado.app.web25;
 
 import android.Manifest;
+import android.webkit.JavascriptInterface;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -54,6 +55,8 @@ public final class MainActivity extends Activity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView,false);
+        webView.addJavascriptInterface(new ReminderBridge(this), "NCAndroidReminders");
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 3026);
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return request.isForMainFrame() && redirectIfExternal(request.getUrl());
