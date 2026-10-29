@@ -1,4 +1,4 @@
-name: Nosso Combinado — Android V1.7.0
+name: Nosso Combinado — Android V1.8.0
 on:
   push:
     branches: [nosso-combinado-v1-release]
@@ -47,6 +47,12 @@ jobs:
           python3 nosso-combinado/nc-native-1-7-patch.py android-v1
           grep -q 'versionCode 170' android-v1/app/build.gradle
           grep -q "versionName '1.7.0'" android-v1/app/build.gradle
+      - name: Integrar conclusão de tarefas e fotos do site 1.8
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-8-patch.py android-v1
+          grep -q 'versionCode 180' android-v1/app/build.gradle
+          grep -q "versionName '1.8.0'" android-v1/app/build.gradle
       - name: Compilar pacote Android
         run: cd android-v1 && gradle --no-daemon :app:assembleDebug
       - name: Validar compilação
@@ -61,7 +67,7 @@ jobs:
       - name: Fontes nativas para auditoria de compatibilidade
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-Fontes-Nativos-1-7
+          name: NossoCombinado-Fontes-Nativos-1-8
           path: |
             android-v1/app/src/main
             android-v1/app/build.gradle
@@ -71,7 +77,7 @@ jobs:
       - name: APK compilado — assinatura provisória
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-V1-7-APK-para-assinatura-privada
+          name: NossoCombinado-V1-8-APK-para-assinatura-privada
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Compilar versão de teste que instala ao lado da 1.4
@@ -87,7 +93,7 @@ jobs:
       - name: APK 1.7 de teste sem remover a 1.4
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-1-7-TESTE-Instalavel-Lado-a-Lado
+          name: NossoCombinado-1-8-TESTE-Instalavel-Lado-a-Lado
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
