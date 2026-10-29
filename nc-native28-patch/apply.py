@@ -41,6 +41,7 @@ change('    private interface Callback {void done(JSONObject j,String error);}',
     private interface Callback {void done(JSONObject j,String error);}''',
        'notify badge and web platform')
 change('handler.postDelayed(periodic,45000);','handler.postDelayed(periodic,45000);handler.postDelayed(realtimeInbox,3600);','run realtime badge')
+change('if(userId.isEmpty())authScreen(false);else {appScreen();refreshMe();}', 'if(android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},499);}\n        if(userId.isEmpty())authScreen(false);else {appScreen();refreshMe();}', 'notification runtime permission')
 change('handler.removeCallbacks(periodic);if(map!=null)',
        'handler.removeCallbacks(periodic);handler.removeCallbacks(realtimeInbox);if(map!=null)',
        'cleanup loops')
