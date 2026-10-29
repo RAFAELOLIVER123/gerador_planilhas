@@ -1,4 +1,4 @@
-name: Nosso Combinado — Android V1.8.0
+name: Nosso Combinado — Android V1.9.0
 on:
   push:
     branches: [nosso-combinado-v1-release]
@@ -53,6 +53,19 @@ jobs:
           python3 nosso-combinado/nc-native-1-8-patch.py android-v1
           grep -q 'versionCode 180' android-v1/app/build.gradle
           grep -q "versionName '1.8.0'" android-v1/app/build.gradle
+      - name: Instalar imagens, ícone oficial e tradução da versão 1.9
+        shell: bash
+        run: |
+          base64 --decode nosso-combinado/nc-assets-1-9.zip.b64 > /tmp/nc-assets19.zip
+          unzip -q -o /tmp/nc-assets19.zip -d android-v1
+          test -f android-v1/app/src/main/java/com/nossocombinado/app/NcLanguage.java
+          test -f android-v1/app/src/main/res/drawable-nodpi/nc_family_banner.png
+      - name: Integrar agenda e interfaces da versão 1.9
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-9-patch.py android-v1
+          grep -q 'versionCode 190' android-v1/app/build.gradle
+          grep -q "versionName '1.9.0'" android-v1/app/build.gradle
       - name: Compilar pacote Android
         run: cd android-v1 && gradle --no-daemon :app:assembleDebug
       - name: Validar compilação
@@ -67,7 +80,7 @@ jobs:
       - name: Fontes nativas para auditoria de compatibilidade
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-Fontes-Nativos-1-8
+          name: NossoCombinado-Fontes-Nativos-1-9
           path: |
             android-v1/app/src/main
             android-v1/app/build.gradle
@@ -77,24 +90,24 @@ jobs:
       - name: APK compilado — assinatura provisória
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-V1-8-APK-para-assinatura-privada
+          name: NossoCombinado-V1-9-APK-para-assinatura-privada
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Compilar versão de teste que instala ao lado da 1.4
         shell: bash
         run: |
-          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste18'/" android-v1/app/build.gradle
-          grep -q "applicationId 'com.nossocombinado.app.teste18'" android-v1/app/build.gradle
-          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 1.8"/' android-v1/app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste19'/" android-v1/app/build.gradle
+          grep -q "applicationId 'com.nossocombinado.app.teste19'" android-v1/app/build.gradle
+          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 1.9"/' android-v1/app/src/main/AndroidManifest.xml
           cd android-v1 && gradle --no-daemon :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste18'"
-      - name: APK 1.8 de teste sem remover a 1.4 ou 1.7
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste19'"
+      - name: APK 1.9 de teste sem remover a 1.4 ou 1.7
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-1-8-TESTE-Instalavel-Lado-a-Lado
+          name: NossoCombinado-1-9-TESTE-Instalavel-Lado-a-Lado
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
