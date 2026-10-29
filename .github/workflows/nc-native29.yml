@@ -1,7 +1,7 @@
 name: Nosso Combinado 2.9 — Android NATIVO completo
 on:
   push:
-    branches: [nosso-combinado-nativo28]
+    branches: [nosso-combinado-nativo29]
     paths:
       - 'nc-native28-patch/**'
       - 'nc-native29-patch/**'
@@ -67,5 +67,5 @@ jobs:
         git add nc-native29-patch/dist/NossoCombinado_NATIVO_2_9_INSTALAVEL.apk
         if ! git diff --cached --quiet; then
           git commit -m "APK nativo 2.9 compilado e assinado"
-          git push origin HEAD:nosso-combinado-nativo28
+          git push origin HEAD:nosso-combinado-nativo29
         fi
