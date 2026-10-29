@@ -114,7 +114,7 @@ jobs:
         run: |
           sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste22'/" android-v1/app/build.gradle
           grep -q "applicationId 'com.nossocombinado.app.teste22'" android-v1/app/build.gradle
-          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 2.2"/' android-v1/app/src/main/AndroidManifest.xml
+          # Manter nome oficial: Nosso Combinado
           cd android-v1 && gradle --no-daemon :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
