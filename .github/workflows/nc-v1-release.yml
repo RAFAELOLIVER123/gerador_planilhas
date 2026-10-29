@@ -83,14 +83,15 @@ jobs:
       - name: Compilar versão de teste que instala ao lado da 1.4
         shell: bash
         run: |
-          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste'/" android-v1/app/build.gradle
-          grep -q "applicationId 'com.nossocombinado.app.teste'" android-v1/app/build.gradle
+          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste18'/" android-v1/app/build.gradle
+          grep -q "applicationId 'com.nossocombinado.app.teste18'" android-v1/app/build.gradle
+          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 1.8"/' android-v1/app/src/main/AndroidManifest.xml
           cd android-v1 && gradle --no-daemon :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste'"
-      - name: APK 1.7 de teste sem remover a 1.4
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste18'"
+      - name: APK 1.8 de teste sem remover a 1.4 ou 1.7
         uses: actions/upload-artifact@v4
         with:
           name: NossoCombinado-1-8-TESTE-Instalavel-Lado-a-Lado
