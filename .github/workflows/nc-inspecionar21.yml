@@ -22,14 +22,15 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           root=Path('android-v1/app/src/main/java/com/nossocombinado/app')
-          for filename in ['MainActivity.java','AlarmReceiver.java','AlarmService.java','AlarmScheduler.java','ReminderScheduler.java']:
-              p=root/filename
+          for p in sorted(root.glob('*.java')):
+              print('FILE',p.name,len(p.read_text().splitlines()))
+          for fn in ['MainActivity.java','ReminderReceiver.java','ReminderScheduler.java','AlarmActivity.java','AlarmService.java','BootReceiver.java','ReminderBootReceiver.java']:
+              p=root/fn
               if not p.exists():continue
               lines=p.read_text().splitlines()
-              print('=====',filename,'LINES',len(lines))
-              matches=[i for i,line in enumerate(lines) if any(k in line.lower() for k in ['postdelayed','alarmmanager','setexact','realtime','notification','chat(', 'privatechat','private_thread','privatechats','privatethread','messages','sound','nc_alarm','audiomanager','schedule','sync','handler'])]
-              seen=set()
-              for i in matches[:180]:
-                  for j in range(max(0,i-1),min(len(lines),i+2)):
-                      if j not in seen:print(f'{j+1:4d} {lines[j][:310]}');seen.add(j)
+              intervals=[(43,68),(230,264),(540,578)] if fn=='MainActivity.java' else [(1,len(lines))]
+              print('=====FILE',fn)
+              for lo,hi in intervals:
+                  for i in range(lo-1,min(hi,len(lines))):
+                      print(f'{i+1}: {lines[i]}')
           PY
