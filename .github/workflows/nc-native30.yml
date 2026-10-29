@@ -1,0 +1,73 @@
+name: Nosso Combinado 3.0 — Android NATIVO completo
+on:
+  push:
+    branches: [nosso-combinado-nativo30]
+    paths:
+      - 'nc-native28-patch/**'
+      - 'nc-native30-patch/**'
+      - '.github/workflows/nc-native30.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - name: Instalar Android SDK
+      run: |
+        SDKMANAGER="$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
+        test -n "$SDKMANAGER"
+        "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+    - uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.9'
+    - name: Extrair fonte Nativa completa
+      run: |
+        mkdir -p nc-native30-build
+        base64 --decode nosso-combinado/android-native.tar.gz.b64 | tar -xz -C nc-native30-build
+        test -s nc-native30-build/app/src/main/java/com/nossocombinado/app/MainActivity.java
+        test -s nc-native30-build/app/src/main/java/com/nossocombinado/app/OfflineDb.java
+        test -s nc-native30-build/app/src/main/java/com/nossocombinado/app/ApiClient.java
+    - name: Aplicar correções nativas 3.0
+      run: python3 nc-native28-patch/apply.py nc-native30-build
+    - name: Corrigir login e sincronização 3.0
+      run: python3 nc-native30-patch/apply.py nc-native30-build
+    - name: Habilitar exclusão de mensagens e conversas nativo 3.0
+      run: python3 nc-native30-patch/apply.py nc-native30-build
+    - name: Gerar audio de alarme original no APK
+      run: python3 nc-native28-patch/generate_alarm.py nc-native30-build
+    - name: Compilar APK nativo 3.0
+      run: gradle --no-daemon -p nc-native30-build :app:assembleDebug
+    - name: Inspecionar tamanho e assinatura
+      run: |
+        APK=nc-native30-build/app/build/outputs/apk/debug/app-debug.apk
+        test -s "$APK"
+        unzip -t "$APK" | tail -1
+        "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+        "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E 'package:|sdkVersion:|application-label:'
+        unzip -l "$APK" | grep -E 'classes[0-9]*.dex|resources.arsc'
+        SIZE=$(stat -c %s "$APK")
+        echo "APK Nativo 3.0 size=$SIZE bytes"
+        test "$SIZE" -gt 1000000
+    - name: Artefato APK instalado
+      uses: actions/upload-artifact@v4
+      with:
+        name: NossoCombinado_NATIVO_3_0
+        path: nc-native30-build/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+    - name: Publicar APK
+      run: |
+        mkdir -p nc-native30-patch/dist
+        cp nc-native30-build/app/build/outputs/apk/debug/app-debug.apk nc-native30-patch/dist/NossoCombinado_NATIVO_3_0_INSTALAVEL.apk
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add nc-native30-patch/dist/NossoCombinado_NATIVO_3_0_INSTALAVEL.apk
+        if ! git diff --cached --quiet; then
+          git commit -m "APK nativo 3.0 compilado e assinado"
+          git push origin HEAD:nosso-combinado-nativo30
+        fi
