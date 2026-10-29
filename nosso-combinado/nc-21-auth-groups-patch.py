@@ -17,7 +17,7 @@ change('if(register){form.addView(name,new LinearLayout.LayoutParams(-1,dp(52)))
             int cursor=password.getSelectionStart();
             password.setTransformationMethod(show?null:android.text.method.PasswordTransformationMethod.getInstance());
             password.setSelection(Math.min(Math.max(cursor,0),password.length()));
-            if(confirmPassword!=null){int c=confirmPassword.getSelectionStart();confirmPassword.setTransformationMethod(show?null:android.text.method.PasswordTransformationMethod.getInstance());confirmPassword.setSelection(Math.min(Math.max(c,0),confirmPassword.length()));}
+            if(confirmPassword!=null){int confirmCursor=confirmPassword.getSelectionStart();confirmPassword.setTransformationMethod(show?null:android.text.method.PasswordTransformationMethod.getInstance());confirmPassword.setSelection(Math.min(Math.max(confirmCursor,0),confirmPassword.length()));}
         });form.addView(showPassword,new LinearLayout.LayoutParams(-1,dp(42)));gap(form,12);''','visibility and password repeat')
 change('String address=email.getText().toString().trim(),secret=password.getText().toString();if(!address.contains("@")||secret.length()<10){msg("Informe um e-mail e senha com pelo menos 10 caracteres.");return;}',
 '''String address=email.getText().toString().trim(),secret=password.getText().toString();if(!address.contains("@")||secret.length()<10){msg("Informe um e-mail e senha com pelo menos 10 caracteres.");return;}
