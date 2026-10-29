@@ -50,13 +50,21 @@ public final class AlarmService extends Service{
   private void startAudio(){
     if(player!=null){try{player.stop();player.release();}catch(Exception ignored){}}
     try{
-      Uri sound=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-      if(sound==null)sound=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
       player=new MediaPlayer();
-      player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-      player.setDataSource(this,sound);player.setLooping(true);
-      player.prepare();player.start();
-    }catch(Exception ignored){}
+      player.setAudioAttributes(new AudioAttributes.Builder()
+         .setUsage(AudioAttributes.USAGE_ALARM)
+         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+      android.content.res.AssetFileDescriptor fd=getResources().openRawResourceFd(R.raw.nc_alarm05);
+      try{player.setDataSource(fd.getFileDescriptor(),fd.getStartOffset(),fd.getLength());}finally{fd.close();}
+      player.setLooping(true);player.prepare();player.start();
+    }catch(Exception failure){
+      if(player!=null){try{player.release();}catch(Exception ignored){}player=null;}
+      try{
+        Uri sound=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+        player=MediaPlayer.create(this,sound);
+        if(player!=null){player.setLooping(true);player.start();}
+      }catch(Exception ignored){}
+    }
   }
   @Override public void onDestroy(){
     handler.removeCallbacksAndMessages(null);
