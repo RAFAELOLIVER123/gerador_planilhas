@@ -74,6 +74,23 @@ jobs:
           name: NossoCombinado-V1-7-APK-para-assinatura-privada
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Compilar versão de teste que instala ao lado da 1.4
+        shell: bash
+        run: |
+          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste'/" android-v1/app/build.gradle
+          grep -q "applicationId 'com.nossocombinado.app.teste'" android-v1/app/build.gradle
+          cd android-v1 && gradle --no-daemon :app:assembleDebug
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep 'name=\x27com.nossocombinado.app.teste\x27'
+      - name: APK 1.7 de teste sem remover a 1.4
+        uses: actions/upload-artifact@v4
+        with:
+          name: NossoCombinado-1-7-TESTE-Instalavel-Lado-a-Lado
+          path: android-v1/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
       - name: Ferramenta oficial para assinatura privada
         uses: actions/upload-artifact@v4
         with:
