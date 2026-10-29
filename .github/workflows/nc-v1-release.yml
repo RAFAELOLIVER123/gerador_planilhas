@@ -1,4 +1,4 @@
-name: Nosso Combinado — Android V1.9.0
+name: Nosso Combinado — Android V2.0.0
 on:
   push:
     branches: [nosso-combinado-v1-release]
@@ -60,6 +60,8 @@ jobs:
           python3 nosso-combinado/nc-native-1-9-patch.py
           grep -q 'versionCode 190' android-v1/app/build.gradle
           grep -q "versionName '1.9.0'" android-v1/app/build.gradle
+      - name: Aplicar melhorias 2.0
+        run: python3 nosso-combinado/nc-native-2-0-patch.py android-v1
       - name: Compilar pacote Android
         run: cd android-v1 && gradle --no-daemon :app:assembleDebug
       - name: Validar compilação
