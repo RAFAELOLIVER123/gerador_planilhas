@@ -53,19 +53,6 @@ jobs:
           python3 nosso-combinado/nc-native-1-8-patch.py android-v1
           grep -q 'versionCode 180' android-v1/app/build.gradle
           grep -q "versionName '1.8.0'" android-v1/app/build.gradle
-      - name: Instalar imagens, ícone oficial e tradução da versão 1.9
-        shell: bash
-        run: |
-          base64 --decode nosso-combinado/nc-assets-1-9.zip.b64 > /tmp/nc-assets19.zip
-          unzip -q -o /tmp/nc-assets19.zip -d android-v1
-          test -f android-v1/app/src/main/java/com/nossocombinado/app/NcLanguage.java
-          test -f android-v1/app/src/main/res/drawable-nodpi/nc_family_banner.png
-      - name: Integrar agenda e interfaces da versão 1.9
-        shell: bash
-        run: |
-          python3 nosso-combinado/nc-native-1-9-patch.py android-v1
-          grep -q 'versionCode 190' android-v1/app/build.gradle
-          grep -q "versionName '1.9.0'" android-v1/app/build.gradle
       - name: Integrar identidade, calendário, idiomas e temas v1.9
         shell: bash
         run: |
