@@ -3,7 +3,7 @@ on:
   push:
     branches: [nosso-combinado-web26]
     paths:
-      - 'nc-android-web26/**'
+      - 'nc-android-web25/**'
       - '.github/workflows/nc-web26.yml'
   workflow_dispatch:
 permissions:
@@ -26,10 +26,10 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Build APK 2.6
-        run: gradle --no-daemon -p nc-android-web26 :app:assembleDebug
+        run: gradle --no-daemon -p nc-android-web25 :app:assembleDebug
       - name: Verificar APK e assinatura
         run: |
-          APK=nc-android-web26/app/build/outputs/apk/debug/app-debug.apk
+          APK=nc-android-web25/app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -t "$APK" | tail -1
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
@@ -38,15 +38,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NossoCombinado_WEB_2_6_TESTE
-          path: nc-android-web26/app/build/outputs/apk/debug/app-debug.apk
+          path: nc-android-web25/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
       - name: Publicar APK no repositório
         run: |
-          mkdir -p nc-android-web26/dist
-          cp nc-android-web26/app/build/outputs/apk/debug/app-debug.apk nc-android-web26/dist/NossoCombinado_WEB_2_6_TESTE.apk
+          mkdir -p nc-android-web25/dist
+          cp nc-android-web25/app/build/outputs/apk/debug/app-debug.apk nc-android-web25/dist/NossoCombinado_WEB_2_6_TESTE.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add nc-android-web26/dist/NossoCombinado_WEB_2_6_TESTE.apk
+          git add nc-android-web25/dist/NossoCombinado_WEB_2_6_TESTE.apk
           if ! git diff --cached --quiet; then
              git commit -m "APK Nosso Combinado Web 2.6 teste instalável"
              git push origin HEAD:nosso-combinado-web26
