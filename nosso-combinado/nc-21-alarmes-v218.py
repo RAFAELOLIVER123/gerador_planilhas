@@ -26,7 +26,7 @@ edit(schedule,'    public static void ensureChannel(Context c){',"""
     }
     public static boolean notificationsAllowed(Context c){
         NotificationManager nm=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
-        if(nm!=null&&!nm.areNotificationsEnabled())return false;
+        if(Build.VERSION.SDK_INT>=24&&nm!=null&&!nm.areNotificationsEnabled())return false;
         if(Build.VERSION.SDK_INT>=33&&c.checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED)return false;
         if(Build.VERSION.SDK_INT>=26&&nm!=null){
             NotificationChannel channel=nm.getNotificationChannel("nc_due_v218");
