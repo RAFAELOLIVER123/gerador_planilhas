@@ -55,15 +55,13 @@ change('''            dialogBuilder().setTitle("Trocar de família")
               .setSingleChoiceItems(options,selectedIndex,(dialog,which)->{''',
        'radio list in elegant dialog')
 change('''                  if(householdId.equals(val(selected,"id")))return;
-                  // A fila offline continua associada à família anterior; nunca é misturada.
                   chooseHousehold(selected);
-                  familyTab="group";
-                  page="members";
+                  familyTab="group";page="members";
                   appScreen();''',
        '''                  dialog.dismiss();
                   if(householdId.equals(val(selected,"id")))return;
                   final String previousPage=page;
-                  // Offline data remains scoped to the original family.
+                  // Offline data stays scoped to the original family.
                   chooseHousehold(selected);
                   privateCid=0;
                   privateTitle="";
