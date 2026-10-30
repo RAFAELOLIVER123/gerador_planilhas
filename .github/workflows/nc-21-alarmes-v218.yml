@@ -1,0 +1,207 @@
+name: Nosso Combinado 2.1.8 ORIGINAL - alarme no horário e notificação
+on:
+  push:
+    branches: [nosso-combinado-21-alarmes-v218]
+    paths:
+      - 'nosso-combinado/release-v1-source.tar.gz.b64'
+      - 'nosso-combinado/nc-native-1-9-patch.py'
+      - 'nosso-combinado/nc-native-2-0-patch.py'
+      - 'nosso-combinado/nc-native-2-1-patch.py'
+      - 'nosso-combinado/nc-native-2-1-files.zip.b64'
+      - 'nosso-combinado/nc-21-minimal-patch.py'
+      - 'nosso-combinado/nc-21-navigation-patch.py'
+      - 'nosso-combinado/nc-21-map-route-patch.py'
+      - 'nosso-combinado/nc-21-auth-groups-patch.py'
+      - 'nosso-combinado/nc-21-family-switch-patch.py'
+      - 'nosso-combinado/nc-21-family-picker-v215.py'
+      - 'nosso-combinado/nc-21-alarm-fix-v216.py'
+      - 'nosso-combinado/nc-21-background-alarm-v217.py'
+      - 'nosso-combinado/nc-21-alarmes-v218.py'
+      - 'nosso-combinado/ReminderAlarmService.java'
+      - '.github/workflows/nc-21-alarmes-v218.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fontes
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Instalar build tools Android
+        shell: bash
+        run: |
+          SDKM="$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
+          test -n "$SDKM"
+          "$SDKM" --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Extrair Android nativo
+        shell: bash
+        run: |
+          mkdir -p android-v1
+          base64 --decode nosso-combinado/release-v1-source.tar.gz.b64 | tar -xzf - -C android-v1
+          test -f android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+          test -f android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'versionName .1.6.0.' android-v1/app/build.gradle
+          grep -q 'c.getIV()' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+          ! grep -q 'init(Cipher.ENCRYPT_MODE,key(),new GCMParameterSpec' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+      - name: Integrar telas nativas da versão 1.7
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-7-patch.py android-v1
+          grep -q 'versionCode 170' android-v1/app/build.gradle
+          grep -q "versionName '1.7.0'" android-v1/app/build.gradle
+      - name: Integrar conclusão de tarefas e fotos do site 1.8
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-8-patch.py android-v1
+          grep -q 'versionCode 180' android-v1/app/build.gradle
+          grep -q "versionName '1.8.0'" android-v1/app/build.gradle
+      - name: Integrar identidade, calendário, idiomas e temas v1.9
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-9-patch.py
+          grep -q 'versionCode 190' android-v1/app/build.gradle
+          grep -q "versionName '1.9.0'" android-v1/app/build.gradle
+      - name: Aplicar melhorias 2.0
+        run: python3 nosso-combinado/nc-native-2-0-patch.py android-v1
+      - name: Instalar mapa híbrido e áudios no Android 2.1
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-2-1-patch.py android-v1
+          grep -q 'versionCode 210' android-v1/app/build.gradle
+          grep -q "versionName '2.1.0'" android-v1/app/build.gradle
+          test -f android-v1/app/src/main/res/raw/nc_alarm05.wav
+          test -f android-v1/app/src/main/res/raw/nc_mensagem.m4a
+      - name: Alterar somente mensagens e som do alarme no fonte original 2.1
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-minimal-patch.py android-v1
+          cp nosso-combinado/ReminderAlarmService.java android-v1/app/src/main/java/com/nossocombinado/app/ReminderAlarmService.java
+          grep -q 'versionCode 211' android-v1/app/build.gradle
+          grep -q 'versionName .2.1.1.' android-v1/app/build.gradle
+          grep -q 'realtimeChat' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'nc_alarm05' android-v1/app/src/main/java/com/nossocombinado/app/ReminderAlarmService.java
+          test -f android-v1/app/src/main/res/raw/nc_alarm05.wav
+          echo 'BASE original v2.1 reconstruida, layout e arquivos de som preservados'
+      - name: Adicionar somente carrossel de atalhos à base original 2.1.1
+        run: |
+          python3 nosso-combinado/nc-21-navigation-patch.py android-v1
+          grep -q 'versionCode 212' android-v1/app/build.gradle
+          grep -q 'toolCarousel' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Mapa Ruas e rotas de origem a destino usando base original
+        run: |
+          python3 nosso-combinado/nc-21-map-route-patch.py android-v1
+          grep -q 'ncDrawRoute' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Cadastro seguro e permissões do criador do grupo
+        run: |
+          python3 nosso-combinado/nc-21-auth-groups-patch.py android-v1
+          grep -q 'versionCode 213' android-v1/app/build.gradle
+          grep -q 'password_confirmation' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Remover testes da interface e permitir alternar famílias
+        run: |
+          python3 nosso-combinado/nc-21-family-switch-patch.py android-v1
+          grep -q 'versionCode 214' android-v1/app/build.gradle
+          grep -q 'switchFamilyDialog' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Seletor de família na tela inicial e Família
+        run: |
+          python3 nosso-combinado/nc-21-family-picker-v215.py android-v1
+          grep -q 'versionCode 215' android-v1/app/build.gradle
+          grep -q 'familySwitcher' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Corrigir agendamento e execução sonora de alarmes do Android
+        run: |
+          python3 nosso-combinado/nc-21-alarm-fix-v216.py android-v1
+          grep -q 'versionCode 216' android-v1/app/build.gradle
+          grep -q 'setAlarmClock' android-v1/app/src/main/java/com/nossocombinado/app/ReminderScheduler.java
+          grep -q 'alarmSyncTicker' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          cmp -s android-v1/app/src/main/res/raw/nc_alarm05.wav android-v1/app/src/main/res/raw/nc_alarm05.wav
+      - name: Reativar alarmes offline e unificar seletor de som
+        run: |
+          python3 nosso-combinado/nc-21-background-alarm-v217.py android-v1
+          grep -q 'versionCode 217' android-v1/app/build.gradle
+          grep -q 'ReminderScheduler.restore' android-v1/app/src/main/java/com/nossocombinado/app/RestartReceiver.java
+          grep -q 'Sons de interações: ATIVADOS' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'WAKE_LOCK' android-v1/app/src/main/AndroidManifest.xml
+      - name: Agendar horario final e notificar com o app fechado
+        run: |
+          python3 nosso-combinado/nc-21-alarmes-v218.py android-v1
+          grep -q 'versionCode 218' android-v1/app/build.gradle
+          grep -q 'schedulePair' android-v1/app/src/main/java/com/nossocombinado/app/ReminderScheduler.java
+          grep -q 'nc_due_v218' android-v1/app/src/main/java/com/nossocombinado/app/ReminderReceiver.java
+          grep -q 'showAlarmStatus' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Compilar pacote Android
+        run: cd android-v1 && gradle --no-daemon :app:assembleDebug
+      - name: Validar compilação
+        shell: bash
+        run: |
+          APK=android-v1/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" | tail -1
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E 'package:|sdkVersion:|application-label:'
+          ls -lh "$APK"
+      - name: Fontes nativas para auditoria de compatibilidade
+        uses: actions/upload-artifact@v4
+        with:
+          name: NossoCombinado-Fontes-Nativos-2-1-8
+          path: |
+            android-v1/app/src/main
+            android-v1/app/build.gradle
+            android-v1/settings.gradle
+            android-v1/build.gradle
+          retention-days: 3
+      - name: APK compilado — assinatura provisória
+        uses: actions/upload-artifact@v4
+        with:
+          name: NossoCombinado-V2-1-8-APK-base
+          path: android-v1/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Compilar versão de teste que instala ao lado da 1.4
+        shell: bash
+        run: |
+          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.teste21'/" android-v1/app/build.gradle
+          grep -q "applicationId 'com.nossocombinado.app.teste21'" android-v1/app/build.gradle
+          sed -i 's/android:label="Nosso Combinado"/android:label="Nosso Combinado 2.1"/' android-v1/app/src/main/AndroidManifest.xml
+          cd android-v1 && gradle --no-daemon :app:assembleDebug
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste21'"
+      - name: APK corrigido original 2.1.8 (mesmo identificador teste21)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NossoCombinado-2-1-8-TESTE-original-mesmo-package
+          path: android-v1/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Disponibilizar APK original 2.1.1 no GitHub para baixar
+        shell: bash
+        run: |
+          set -e
+          mkdir -p dist/21-8-alarmes-notificacoes
+          cp android-v1/app/build/outputs/apk/debug/app-debug.apk dist/21-8-alarmes-notificacoes/NossoCombinado_2_1_8_ALARMES_NOTIFICACOES.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/21-8-alarmes-notificacoes/NossoCombinado_2_1_8_ALARMES_NOTIFICACOES.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/21-8-alarmes-notificacoes/NossoCombinado_2_1_8_ALARMES_NOTIFICACOES.apk | grep -E "package:|application-label:"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/21-8-alarmes-notificacoes/NossoCombinado_2_1_8_ALARMES_NOTIFICACOES.apk
+          if ! git diff --cached --quiet; then
+            git commit -m "APK original 2.1.8: alarmes no horário e notificações com app fechado"
+            git push origin HEAD:nosso-combinado-21-alarmes-v218
+          fi
+      - name: Ferramenta oficial para assinatura privada
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-ApkSigner-Oficial
+          path: /usr/local/lib/android/sdk/build-tools/35.0.0/lib/apksigner.jar
+          if-no-files-found: error
