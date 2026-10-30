@@ -72,11 +72,12 @@ change('''                  if(householdId.equals(val(selected,"id")))return;
 change('text(artText,"Nossa família · "+householdName,15,NAVY,true);',
        'familySwitcher(artText);',
        'replace home group label with dropdown')
-change('''sectionTitle("Nossa família ♡","Grupo: "+householdName);
-        addButton(content,"⇄  Trocar de família",PINK,WHITE,this::switchFamilyDialog);gap(content,8);''',
-       '''sectionTitle("Nossa família ♡","Selecione qual família deseja visualizar.");
-        familySwitcher(content);''',
-       'replace members duplicate button with selector')
+change('sectionTitle("Nossa família ♡","Grupo: "+householdName);',
+       'sectionTitle("Nossa família ♡","Selecione qual família deseja visualizar.");familySwitcher(content);',
+       'show family selector in members page')
+change('addButton(content,"⇄  Trocar de família",PINK,WHITE,this::switchFamilyDialog);gap(content,8);',
+       '',
+       'remove old duplicate family switching button')
 main.write_text(s,encoding='utf-8')
 g=grad.read_text(encoding='utf-8')
 for old,new in [("versionCode 214","versionCode 215"),("versionName '2.1.4'","versionName '2.1.5'")]:
