@@ -21,6 +21,7 @@ on:
       - 'nosso-combinado/nc-21-listas-v219.py'
       - 'nosso-combinado/nc-21-listas-v2110.py'
       - 'nosso-combinado/nc-21-listas-v2111.py'
+      - 'nosso-combinado/nc-21-datas-v2112.py'
       - '.github/workflows/nc-21-datas-v2112.yml'
   workflow_dispatch:
 
@@ -158,37 +159,36 @@ jobs:
           grep -q "versionName '2.1.10'" android-v1/app/build.gradle
           grep -q 'ncListRenderItems' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           grep -q 'ncExpandedListId' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
-      - name: Remover botões de ocultação e ativar toque nas listas Android 2.1.11
+      - name: Remover botões de ocultação e ativar toque nas listas Android 2.1.12
         shell: bash
         run: |
           python3 nosso-combinado/nc-21-listas-v2111.py android-v1
           grep -q 'versionCode 221' android-v1/app/build.gradle
-          grep -q "versionName '2.1.11'" android-v1/app/build.gradle
+          grep -q "versionName '2.1.12'" android-v1/app/build.gradle
           grep -q 'boughtTile.setOnClickListener' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           grep -q 'titleLine.setOnClickListener' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
-      - name: Inspecionar métodos de datas do app nativo
+      - name: Padronizar datas do aplicativo Android 2.1.12
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-datas-v2112.py android-v1
+          grep -q 'versionCode 222' android-v1/app/build.gradle
+          grep -q "versionName '2.1.12'" android-v1/app/build.gradle
+          grep -q 'ncDateBR' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'ncDateSave' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Validar formatos de entrada de datas e código
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          s=Path('android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java').read_text()
-          names=['label','text','itemDate','formDialog','utc','localDate','today','shopping','editFinance','taskEditor','eventEditor','calendar','professionalForm','newTask','editTask','newEvent','editEvent','createProfessional']
-          for name in names:
-              import re
-              matches=list(re.finditer(r'private\s+(?:[\w.\[\]<>]+\s+)+%s\s*\('%re.escape(name),s))
-              print('\nMETHOD',name,'COUNT',len(matches))
-              for m in matches[:2]:
-                  i=m.start()
-                  if name in ['shopping','editFinance','taskEditor','eventEditor','calendar','professionalForm','newTask','editTask','newEvent','editEvent','createProfessional']:
-                      print(s[i:i+6000].split('\n    private ')[0][:6000])
-                  else:
-                      print(s[i:i+4300].split('\n    private ')[0][:4300])
-          print('\nOTHER DATE LINES:')
-          for n,line in enumerate(s.splitlines(),1):
-              if any(k in line.lower() for k in ['yyyy-mm-dd','dd/mm','aaaa-mm','data prevista','due_at','transacted_on','begins_at','birth_date','formatdate','dateformat']) and len(line)>0:
-                  print(n,line[:250])
+          x=Path('android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java').read_text()
+          assert 'v.setText(ncDateBR(tr(text)));' in x
+          assert 'vals[i]=ncDateSave(' in x
+          assert 'ncDateHint(hints[i])' in x
+          assert 'new String[]{"Título","Data prevista (AAAA-MM-DD)"' in x
+          assert 'private String today(){return new SimpleDateFormat("yyyy-MM-dd"' in x
+          assert 'dateButton.setText("📅 "+ncDateBR(date[0]))' in x
+          print('Validado: conversão UI, formulários, agenda e datas internas ISO preservadas')
           PY
-          exit 1
       - name: Compilar pacote Android
         run: cd android-v1 && gradle --no-daemon :app:assembleDebug
       - name: Validar compilação
@@ -203,7 +203,7 @@ jobs:
       - name: Fontes nativas para auditoria de compatibilidade
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-Fontes-Nativos-2-1-11
+          name: NossoCombinado-Fontes-Nativos-2-1-12
           path: |
             android-v1/app/src/main
             android-v1/app/build.gradle
@@ -213,7 +213,7 @@ jobs:
       - name: APK compilado — assinatura provisória
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-V2-1-11-APK-base
+          name: NossoCombinado-V2-1-12-APK-base
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Compilar versão de teste que instala ao lado da 1.4
@@ -227,56 +227,56 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.teste21'"
-      - name: APK 2.1.11 (mesmo identificador teste21, assinatura independente)
+      - name: APK 2.1.12 (mesmo identificador teste21, assinatura independente)
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-2-1-11-LISTAS
+          name: NossoCombinado-2-1-12-DATAS
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
-      - name: Publicar APK 2.1.11 compilado no GitHub
+      - name: Publicar APK 2.1.12 compilado no GitHub
         shell: bash
         run: |
           set -e
           mkdir -p dist/21-12-datas-br
-          cp android-v1/app/build/outputs/apk/debug/app-debug.apk dist/21-12-datas-br/NossoCombinado_2_1_11_LISTAS_TOQUE.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/21-12-datas-br/NossoCombinado_2_1_11_LISTAS_TOQUE.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/21-12-datas-br/NossoCombinado_2_1_11_LISTAS_TOQUE.apk | grep -E "package:|application-label:"
+          cp android-v1/app/build/outputs/apk/debug/app-debug.apk dist/21-12-datas-br/NossoCombinado_2_1_12_DATAS_BR.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/21-12-datas-br/NossoCombinado_2_1_12_DATAS_BR.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/21-12-datas-br/NossoCombinado_2_1_12_DATAS_BR.apk | grep -E "package:|application-label:"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist/21-12-datas-br/NossoCombinado_2_1_11_LISTAS_TOQUE.apk
+          git add dist/21-12-datas-br/NossoCombinado_2_1_12_DATAS_BR.apk
           if ! git diff --cached --quiet; then
-            git commit -m "APK 2.1.11: ocultação por toque, demais telas preservadas"
+            git commit -m "APK 2.1.12: datas no padrão brasileiro, demais telas preservadas"
             git push origin HEAD:nosso-combinado-21-datas-v2112
           fi
       - name: Montar APK paralelo sem remover o app antigo
         shell: bash
         run: |
-          sed -i "s/applicationId 'com.nossocombinado.app.teste21'/applicationId 'com.nossocombinado.app.toque'/" android-v1/app/build.gradle
-          grep -q "applicationId 'com.nossocombinado.app.toque'" android-v1/app/build.gradle
+          sed -i "s/applicationId 'com.nossocombinado.app.teste21'/applicationId 'com.nossocombinado.app.datasbr'/" android-v1/app/build.gradle
+          grep -q "applicationId 'com.nossocombinado.app.datasbr'" android-v1/app/build.gradle
           cd android-v1 && gradle --no-daemon :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.toque'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.nossocombinado.app.datasbr'"
       - name: Disponibilizar instalador paralelo como artefato
         uses: actions/upload-artifact@v4
         with:
-          name: NossoCombinado-2-1-11-PARALELO-APK
+          name: NossoCombinado-2-1-12-PARALELO-APK
           path: android-v1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publicar APK paralelo no GitHub
         shell: bash
         run: |
           set -e
-          OUT=dist/21-12-datas-br/NossoCombinado_2_1_11_PARALELO.apk
+          OUT=dist/21-12-datas-br/NossoCombinado_2_1_12_PARALELO.apk
           cp android-v1/app/build/outputs/apk/debug/app-debug.apk "$OUT"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$OUT"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$OUT"
           if ! git diff --cached --quiet; then
-            git commit -m "APK 2.1.11 em instalação paralela para testar sem remover versão anterior"
+            git commit -m "APK 2.1.12 em instalação paralela para testar sem remover versão anterior"
             git push origin HEAD:nosso-combinado-21-datas-v2112
           fi
       - name: Ferramenta oficial para assinatura privada
