@@ -172,15 +172,15 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java').read_text()
-          names=['label','text','itemDate','formDialog','utc','localDate','today','shopping','editFinance','newTask','editTask','newEvent','editEvent','createProfessional']
+          names=['label','text','itemDate','formDialog','utc','localDate','today','shopping','editFinance','taskEditor','eventEditor','calendar','professionalForm','newTask','editTask','newEvent','editEvent','createProfessional']
           for name in names:
               import re
               matches=list(re.finditer(r'private\s+(?:[\w.\[\]<>]+\s+)+%s\s*\('%re.escape(name),s))
               print('\nMETHOD',name,'COUNT',len(matches))
               for m in matches[:2]:
                   i=m.start()
-                  if name in ['shopping','editFinance','newTask','editTask','newEvent','editEvent','createProfessional']:
-                      print(s[i:i+1500].split('\n    private ')[0][:1500])
+                  if name in ['shopping','editFinance','taskEditor','eventEditor','calendar','professionalForm','newTask','editTask','newEvent','editEvent','createProfessional']:
+                      print(s[i:i+6000].split('\n    private ')[0][:6000])
                   else:
                       print(s[i:i+4300].split('\n    private ')[0][:4300])
           print('\nOTHER DATE LINES:')
