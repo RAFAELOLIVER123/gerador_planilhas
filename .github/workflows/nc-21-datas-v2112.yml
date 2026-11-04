@@ -164,7 +164,7 @@ jobs:
         run: |
           python3 nosso-combinado/nc-21-listas-v2111.py android-v1
           grep -q 'versionCode 221' android-v1/app/build.gradle
-          grep -q "versionName '2.1.12'" android-v1/app/build.gradle
+          grep -q "versionName '2.1.11'" android-v1/app/build.gradle
           grep -q 'boughtTile.setOnClickListener' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           grep -q 'titleLine.setOnClickListener' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
       - name: Padronizar datas do aplicativo Android 2.1.12
