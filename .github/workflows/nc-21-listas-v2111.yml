@@ -150,12 +150,12 @@ jobs:
           grep -q "versionName '2.1.9'" android-v1/app/build.gradle
           grep -q 'ncListEdit' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           grep -q 'ncListSummary' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
-      - name: Atualizar listas recolhíveis Android 2.1.11
+      - name: Preparar base de listas compactas Android 2.1.10
         shell: bash
         run: |
           python3 nosso-combinado/nc-21-listas-v2110.py android-v1
           grep -q 'versionCode 220' android-v1/app/build.gradle
-          grep -q "versionName '2.1.11'" android-v1/app/build.gradle
+          grep -q "versionName '2.1.10'" android-v1/app/build.gradle
           grep -q 'ncListRenderItems' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           grep -q 'ncExpandedListId' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
       - name: Remover botões de ocultação e ativar toque nas listas Android 2.1.11
