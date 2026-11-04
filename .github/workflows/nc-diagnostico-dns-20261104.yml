@@ -1,0 +1,35 @@
+name: Nosso Combinado - diagnostico de DNS e API
+on:
+  push:
+    branches: [nosso-combinado-diagnostico-dns-20261104]
+    paths: ['.github/workflows/nc-diagnostico-dns-20261104.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Resolver DNS e testar endpoints sem credenciais
+        shell: bash
+        run: |
+          set +e
+          echo '=== DNS do site (sem dados de usuario) ==='
+          getent ahostsv4 violet-grasshopper-887660.hostingersite.com | head -8
+          echo "GETENT_EXIT=${PIPESTATUS[0]}"
+          python3 - <<'PY'
+          import socket
+          names = ["violet-grasshopper-887660.hostingersite.com","hostingersite.com","www.google.com"]
+          for name in names:
+              try:
+                  addresses=sorted({t[4][0] for t in socket.getaddrinfo(name,443,type=socket.SOCK_STREAM)})
+                  print("DNS",name,"OK",addresses[:5])
+              except Exception as e:print("DNS",name,"ERROR",type(e).__name__,str(e))
+          PY
+          echo '=== HTTP do site principal ==='
+          curl --location --silent --show-error --head --max-time 15 --connect-timeout 8 --output /dev/null --write-out 'SITE_STATUS=%{http_code} REMOTE_IP=%{remote_ip}\n' https://violet-grasshopper-887660.hostingersite.com/
+          echo "SITE_CURL_EXIT=$?"
+          echo '=== HTTP da API ==='
+          curl --silent --show-error --max-time 15 --connect-timeout 8 --output /dev/null --write-out 'API_STATUS=%{http_code} REMOTE_IP=%{remote_ip}\n' https://violet-grasshopper-887660.hostingersite.com/api/index.php
+          echo "API_CURL_EXIT=$?"
