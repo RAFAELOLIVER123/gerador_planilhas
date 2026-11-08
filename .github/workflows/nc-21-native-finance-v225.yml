@@ -1,0 +1,266 @@
+name: Nosso Combinado Nativo 2.1.15 - Financeiro e Planejamento
+on:
+  push:
+    branches: [nosso-combinado-21-native-finance-v225]
+    paths:
+      - 'nosso-combinado/nc-21-native-views-v224.py'
+      - 'nosso-combinado/nc-21-native-finance-v225.py'
+      - 'nosso-combinado/nc-native-finance-v225.javafrag'
+      - 'nosso-combinado/nc-native-views-v224.javafrag'
+      - 'nosso-combinado/NcListAlarmReceiver.java'
+      - 'nosso-combinado/WebToolActivity.java'
+      - '.github/workflows/nc-21-native-ui-v224.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - name: Fontes
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - name: Instalar SDK Android 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Extrair Android nativo
+        shell: bash
+        run: |
+          mkdir -p android-v1
+          base64 --decode nosso-combinado/release-v1-source.tar.gz.b64 | tar -xzf - -C android-v1
+          test -f android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+          test -f android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'versionName .1.6.0.' android-v1/app/build.gradle
+          grep -q 'c.getIV()' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+          ! grep -q 'init(Cipher.ENCRYPT_MODE,key(),new GCMParameterSpec' android-v1/app/src/main/java/com/nossocombinado/app/SecureStore.java
+      - name: Integrar telas nativas da versão 1.7
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-7-patch.py android-v1
+          grep -q 'versionCode 170' android-v1/app/build.gradle
+          grep -q "versionName '1.7.0'" android-v1/app/build.gradle
+      - name: Integrar conclusão de tarefas e fotos do site 1.8
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-8-patch.py android-v1
+          grep -q 'versionCode 180' android-v1/app/build.gradle
+          grep -q "versionName '1.8.0'" android-v1/app/build.gradle
+      - name: Integrar identidade, calendário, idiomas e temas v1.9
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-1-9-patch.py
+          grep -q 'versionCode 190' android-v1/app/build.gradle
+          grep -q "versionName '1.9.0'" android-v1/app/build.gradle
+      - name: Aplicar melhorias 2.0
+        run: python3 nosso-combinado/nc-native-2-0-patch.py android-v1
+      - name: Instalar mapa híbrido e áudios no Android 2.1
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-native-2-1-patch.py android-v1
+          grep -q 'versionCode 210' android-v1/app/build.gradle
+          grep -q "versionName '2.1.0'" android-v1/app/build.gradle
+          test -f android-v1/app/src/main/res/raw/nc_alarm05.wav
+          test -f android-v1/app/src/main/res/raw/nc_mensagem.m4a
+      - name: Alterar somente mensagens e som do alarme no fonte original 2.1
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-minimal-patch.py android-v1
+          cp nosso-combinado/ReminderAlarmService.java android-v1/app/src/main/java/com/nossocombinado/app/ReminderAlarmService.java
+          grep -q 'versionCode 211' android-v1/app/build.gradle
+          grep -q 'versionName .2.1.1.' android-v1/app/build.gradle
+          grep -q 'realtimeChat' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'nc_alarm05' android-v1/app/src/main/java/com/nossocombinado/app/ReminderAlarmService.java
+          test -f android-v1/app/src/main/res/raw/nc_alarm05.wav
+          echo 'BASE original v2.1 reconstruida, layout e arquivos de som preservados'
+      - name: Adicionar somente carrossel de atalhos à base original 2.1.1
+        run: |
+          python3 nosso-combinado/nc-21-navigation-patch.py android-v1
+          grep -q 'versionCode 212' android-v1/app/build.gradle
+          grep -q 'toolCarousel' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Mapa Ruas e rotas de origem a destino usando base original
+        run: |
+          python3 nosso-combinado/nc-21-map-route-patch.py android-v1
+          grep -q 'ncDrawRoute' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Cadastro seguro e permissões do criador do grupo
+        run: |
+          python3 nosso-combinado/nc-21-auth-groups-patch.py android-v1
+          grep -q 'versionCode 213' android-v1/app/build.gradle
+          grep -q 'password_confirmation' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Remover testes da interface e permitir alternar famílias
+        run: |
+          python3 nosso-combinado/nc-21-family-switch-patch.py android-v1
+          grep -q 'versionCode 214' android-v1/app/build.gradle
+          grep -q 'switchFamilyDialog' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Seletor de família na tela inicial e Família
+        run: |
+          python3 nosso-combinado/nc-21-family-picker-v215.py android-v1
+          grep -q 'versionCode 215' android-v1/app/build.gradle
+          grep -q 'familySwitcher' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Corrigir agendamento e execução sonora de alarmes do Android
+        run: |
+          python3 nosso-combinado/nc-21-alarm-fix-v216.py android-v1
+          grep -q 'versionCode 216' android-v1/app/build.gradle
+          grep -q 'setAlarmClock' android-v1/app/src/main/java/com/nossocombinado/app/ReminderScheduler.java
+          grep -q 'alarmSyncTicker' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          cmp -s android-v1/app/src/main/res/raw/nc_alarm05.wav android-v1/app/src/main/res/raw/nc_alarm05.wav
+      - name: Reativar alarmes offline e unificar seletor de som
+        run: |
+          python3 nosso-combinado/nc-21-background-alarm-v217.py android-v1
+          grep -q 'versionCode 217' android-v1/app/build.gradle
+          grep -q 'ReminderScheduler.restore' android-v1/app/src/main/java/com/nossocombinado/app/RestartReceiver.java
+          grep -q 'Sons de interações: ATIVADOS' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'WAKE_LOCK' android-v1/app/src/main/AndroidManifest.xml
+      - name: Agendar horario final e notificar com o app fechado
+        run: |
+          python3 nosso-combinado/nc-21-alarmes-v218.py android-v1
+          grep -q 'versionCode 218' android-v1/app/build.gradle
+          grep -q 'schedulePair' android-v1/app/src/main/java/com/nossocombinado/app/ReminderScheduler.java
+          grep -q 'nc_due_v218' android-v1/app/src/main/java/com/nossocombinado/app/ReminderReceiver.java
+          grep -q 'showAlarmStatus' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Integrar listas profissionais Android 2.1.9
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-listas-v219.py android-v1
+          grep -q 'versionCode 219' android-v1/app/build.gradle
+          grep -q "versionName '2.1.9'" android-v1/app/build.gradle
+          grep -q 'ncListEdit' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'ncListSummary' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Preparar base de listas compactas Android 2.1.10
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-listas-v2110.py android-v1
+          grep -q 'versionCode 220' android-v1/app/build.gradle
+          grep -q "versionName '2.1.10'" android-v1/app/build.gradle
+          grep -q 'ncListRenderItems' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'ncExpandedListId' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Remover botões de ocultação e ativar toque nas listas Android 2.1.12
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-listas-v2111.py android-v1
+          grep -q 'versionCode 221' android-v1/app/build.gradle
+          grep -q "versionName '2.1.11'" android-v1/app/build.gradle
+          grep -q 'boughtTile.setOnClickListener' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'titleLine.setOnClickListener' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Padronizar datas do aplicativo Android 2.1.12
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-datas-v2112.py android-v1
+          grep -q 'versionCode 222' android-v1/app/build.gradle
+          grep -q "versionName '2.1.12'" android-v1/app/build.gradle
+          grep -q 'ncDateBR' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'ncDateSave' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+      - name: Validar formatos de entrada de datas e código
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          x=Path('android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java').read_text()
+          assert 'v.setText(ncDateBR(tr(text)));' in x
+          assert 'vals[i]=ncDateSave(' in x
+          assert 'ncDateHint(hints[i])' in x
+          assert 'new String[]{"Título","Data prevista (AAAA-MM-DD)"' in x
+          assert 'private String today(){return new SimpleDateFormat("yyyy-MM-dd"' in x
+          assert 'dateButton.setText("📅 "+ncDateBR(date[0]))' in x
+          print('Validado: conversão UI, formulários, agenda e datas internas ISO preservadas')
+          PY
+      - name: Inspecionar rotas nativas sem publicar dados de usuários
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s=Path("android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java").read_text().splitlines()
+          pats=['void navigate(', 'void appScreen(', 'void loadPage(', 'void shopping(', 'void finance(', 'void ncOpenPortal(', 'void root(', 'JSONObject withHid(', 'JSONObject data(', 'newListItem(']
+          for term in pats:
+              found=[i for i,x in enumerate(s) if term in x]
+              for i in found[:2]:
+                  print("=== ",term," line",i+1," ===")
+                  print("\n".join(f"{j+1}: "+s[j][:220] for j in range(max(0,i-1),min(len(s),i+36))))
+          PY
+      - name: Incluir comparador e financeiro sem remover app nativo
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-modulos-v223.py android-v1
+          cp nosso-combinado/WebToolActivity.java android-v1/app/src/main/java/com/nossocombinado/app/WebToolActivity.java
+          grep -q 'versionCode 223' android-v1/app/build.gradle
+          grep -q "versionName '2.1.13'" android-v1/app/build.gradle
+          grep -q 'WebToolActivity' android-v1/app/src/main/AndroidManifest.xml
+          grep -q 'ReminderScheduler.restore' android-v1/app/src/main/java/com/nossocombinado/app/RestartReceiver.java
+          grep -q 'ncListEdit' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          test -s android-v1/app/src/main/res/raw/nc_alarm05.wav
+          test -s android-v1/app/src/main/res/raw/nc_mensagem.m4a
+      - name: Ativar formulário de listas e comparador nativos 2.1.14
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-native-views-v224.py android-v1
+          cp nosso-combinado/NcListAlarmReceiver.java android-v1/app/src/main/java/com/nossocombinado/app/NcListAlarmReceiver.java
+          grep -q "versionCode 224" android-v1/app/build.gradle
+          grep -q "versionName '2.1.14'" android-v1/app/build.gradle
+          grep -q 'private void ncNativeListForm(' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q 'private void ncComparePage(' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q "NcListAlarmReceiver" android-v1/app/src/main/AndroidManifest.xml
+          test -s android-v1/app/src/main/res/raw/nc_alarm05.wav
+      - name: Integrar Financeiro e Planejamento Mensal nativos 2.1.15
+        shell: bash
+        run: |
+          python3 nosso-combinado/nc-21-native-finance-v225.py android-v1
+          grep -q "versionCode 225" android-v1/app/build.gradle
+          grep -q "versionName '2.1.15'" android-v1/app/build.gradle
+          grep -q "private void nfFinanceView(" android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q "private void nfRenderMatrix(" android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q "private void nfReverse(" android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q "finance_matrix_payment_reverse" android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          grep -q "transaction_payment_add" android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          test -s android-v1/app/src/main/res/raw/nc_alarm05.wav
+      - name: Garantir instalação paralela com aplicativo anterior
+        shell: bash
+        run: |
+          sed -i "s/applicationId 'com.nossocombinado.app'/applicationId 'com.nossocombinado.app.mobile225'/" android-v1/app/build.gradle
+          grep -q "applicationId 'com.nossocombinado.app.mobile225'" android-v1/app/build.gradle
+      - name: Compilar APK nativo 2.1.15
+        run: cd android-v1 && gradle --no-daemon :app:assembleDebug
+      - name: Verificar assinatura, tamanho e recursos
+        shell: bash
+        run: |
+          APK=android-v1/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          test "$(stat -c%s "$APK")" -gt 1000000
+          unzip -t "$APK" | tail -1
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E 'package:|application-label:'
+          unzip -l "$APK" | grep -q 'res/raw/nc_alarm05.wav'
+          unzip -l "$APK" | grep -q 'classes.dex'
+          ls -lah "$APK"
+      - name: Copiar APK instalável
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp android-v1/app/build/outputs/apk/debug/app-debug.apk dist/Nosso-Combinado-Nativo-2.1.15-Financeiro-Completo.apk
+      - name: Publicar arquivo APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nosso-Combinado-Nativo-2.1.15-APK
+          path: dist/Nosso-Combinado-Nativo-2.1.15-Financeiro-Completo.apk
+          if-no-files-found: error
+      - name: Publicar versão para instalar no celular
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "nc-android-nativo-2.1.15" dist/Nosso-Combinado-Nativo-2.1.15-Financeiro-Completo.apk \
+            --repo "RAFAELOLIVER123/gerador_planilhas" \
+            --target "nosso-combinado-21-native-finance-v225" \
+            --title "Nosso Combinado Nativo 2.1.15" \
+            --notes "Versão nativa 2.1.15: financeiro mês a mês, entradas e saídas, recebido e pago, pendências, pagamentos parciais, histórico e estorno, planejamento mensal nativo editável. Base anterior preservada, inclusive alarmes, mapa, chat e listas. Instala em paralelo; publicação no site não é alterada." --prerelease

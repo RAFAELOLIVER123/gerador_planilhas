@@ -1,0 +1,482 @@
+
+    // Financeiro nativo 2.1.15 — fonte única de dados: API do site.
+    private String nfMonth = new java.text.SimpleDateFormat("yyyy-MM",java.util.Locale.US).format(new java.util.Date());
+    private String nfFilter = "all";
+    private JSONObject nfLedger = new JSONObject();
+    private int nfMatrixSeq = 0;
+
+    private java.math.BigDecimal nfAmount(JSONObject item,String key) {
+        return ncListAmount(item,key,java.math.BigDecimal.ZERO);
+    }
+    private java.math.BigDecimal nfMoney0() { return java.math.BigDecimal.ZERO; }
+    private java.math.BigDecimal nfRemaining(JSONObject tx) {
+        return nfAmount(tx,"amount").subtract(nfAmount(tx,"paid_amount")).max(java.math.BigDecimal.ZERO);
+    }
+    private String nfMoney(java.math.BigDecimal value) {return ncListMoney(value);}
+    private String nfCompetence(JSONObject tx) {
+        for(String key:new String[]{"competence_month","due_on","transacted_on"}) {
+            String d=val(tx,key);
+            if(d.length()>=7&&d.charAt(4)=='-')return d.substring(0,7);
+        }
+        return "";
+    }
+    private String nfMonthTitle() {
+        String[] names={"Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"};
+        try{
+            int month=Integer.parseInt(nfMonth.substring(5,7));
+            return names[month-1]+" "+nfMonth.substring(0,4);
+        }catch(Exception e){return nfMonth;}
+    }
+    private void nfMoveMonth(int offset,boolean matrix) {
+        try {
+            java.text.SimpleDateFormat iso=new java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US);
+            iso.setLenient(false);
+            java.util.Calendar c=java.util.Calendar.getInstance();
+            c.setTime(iso.parse(nfMonth+"-01"));
+            c.add(java.util.Calendar.MONTH,offset);
+            nfMonth=new java.text.SimpleDateFormat("yyyy-MM",java.util.Locale.US).format(c.getTime());
+        }catch(Exception ignored){}
+        if(matrix)nfLoadMatrix();else nfFinanceView(nfLedger);
+    }
+    private void nfPickMonth(boolean matrix){
+        java.util.Calendar c=java.util.Calendar.getInstance();
+        try{
+            c.setTime(new java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US).parse(nfMonth+"-01"));
+        }catch(Exception ignored){}
+        android.app.DatePickerDialog picker=new android.app.DatePickerDialog(this,(view,year,month,day)->{
+            nfMonth=String.format(java.util.Locale.US,"%04d-%02d",year,month+1);
+            if(matrix)nfLoadMatrix();else nfFinanceView(nfLedger);
+        },c.get(java.util.Calendar.YEAR),c.get(java.util.Calendar.MONTH),1);
+        picker.show();
+    }
+    private void nfHeader(boolean matrix) {
+        sectionTitle(matrix?"▦ Planejamento mensal":"R$ Financeiro",
+          matrix?"Receitas e despesas previstas por competência.":"Entradas, saídas, pagamentos e saldo do mês.");
+        LinearLayout selector=horizontal();selector.setGravity(Gravity.CENTER_VERTICAL);
+        TextView prev=button("‹",Color.rgb(238,242,249),NAVY,()->nfMoveMonth(-1,matrix));
+        prev.setTextSize(22);selector.addView(prev,new LinearLayout.LayoutParams(dp(44),dp(43)));
+        TextView month=button(nfMonthTitle()+" ▾",Color.WHITE,NAVY,()->nfPickMonth(matrix));
+        month.setTextSize(14);selector.addView(month,new LinearLayout.LayoutParams(0,dp(44),1));
+        TextView next=button("›",Color.rgb(238,242,249),NAVY,()->nfMoveMonth(1,matrix));
+        next.setTextSize(22);selector.addView(next,new LinearLayout.LayoutParams(dp(44),dp(43)));
+        content.addView(selector);gap(content,10);
+        LinearLayout views=horizontal();
+        TextView ledger=button("Movimentações",matrix?Color.rgb(240,244,250):PINK,matrix?NAVY:WHITE,()->navigate("finance"));
+        TextView planning=button("▦ Planejamento",matrix?PINK:Color.rgb(240,244,250),matrix?WHITE:NAVY,()->navigate("finance-matrix"));
+        LinearLayout.LayoutParams l=new LinearLayout.LayoutParams(0,dp(44),1);l.rightMargin=dp(5);
+        views.addView(ledger,l);views.addView(planning,new LinearLayout.LayoutParams(0,dp(44),1));
+        content.addView(views);gap(content,10);
+    }
+    private void nfTotals(java.math.BigDecimal expectIncome,java.math.BigDecimal received,
+                          java.math.BigDecimal expectExpense,java.math.BigDecimal paid) {
+        LinearLayout overview=card(content);
+        text(overview,"Resumo financeiro · "+nfMonthTitle(),15,NAVY,true);
+        gap(overview,8);
+        LinearLayout first=horizontal();
+        ncListSummary(first,"ENTRADAS PREVISTAS",expectIncome,Color.rgb(15,120,92));
+        ncListSummary(first,"RECEBIDO",received,Color.rgb(15,120,92));
+        overview.addView(first);gap(overview,7);
+        LinearLayout second=horizontal();
+        ncListSummary(second,"SAÍDAS PREVISTAS",expectExpense,Color.rgb(192,70,59));
+        ncListSummary(second,"PAGO",paid,Color.rgb(192,70,59));
+        overview.addView(second);gap(overview,8);
+        text(overview,"A receber: "+nfMoney(expectIncome.subtract(received).max(nfMoney0())),13,Color.rgb(15,120,92),true);
+        text(overview,"Falta pagar: "+nfMoney(expectExpense.subtract(paid).max(nfMoney0())),13,Color.rgb(192,70,59),true);
+        text(overview,"Saldo realizado: "+nfMoney(received.subtract(paid)),15,NAVY,true);
+        text(overview,"Saldo previsto: "+nfMoney(expectIncome.subtract(expectExpense)),12,MUTED,false);
+    }
+    private String nfStatus(JSONObject tx) {
+        java.math.BigDecimal paid=nfAmount(tx,"paid_amount"),total=nfAmount(tx,"amount");
+        if(total.signum()>0&&paid.compareTo(total)>=0)return "income".equals(val(tx,"direction"))?"Recebido":"Pago";
+        if(paid.signum()>0)return "Parcial";
+        return "Pendente";
+    }
+    private void nfFinanceView(JSONObject data) {
+        if(!page.equals("finance")||content==null)return;
+        nfLedger=data==null?new JSONObject():data;
+        content.removeAllViews();nfHeader(false);
+        addButton(content,"＋ Novo lançamento",PINK,WHITE,this::newFinance);
+        gap(content,12);
+        JSONArray all=array(nfLedger,"items");
+        java.math.BigDecimal expIn=nfMoney0(),got=nfMoney0(),expOut=nfMoney0(),spent=nfMoney0();
+        java.util.ArrayList<JSONObject> monthly=new java.util.ArrayList<>();
+        for(int i=0;i<all.length();i++){
+            JSONObject tx=row(all,i);
+            if(!nfMonth.equals(nfCompetence(tx)))continue;
+            monthly.add(tx);
+            java.math.BigDecimal amount=nfAmount(tx,"amount"),paid=nfAmount(tx,"paid_amount").min(amount);
+            if("income".equals(val(tx,"direction"))){expIn=expIn.add(amount);got=got.add(paid);}
+            else{expOut=expOut.add(amount);spent=spent.add(paid);}
+        }
+        nfTotals(expIn,got,expOut,spent);
+        gap(content,12);
+        String[][] filters={{"all","Todos"},{"income","Entradas"},{"expense","Saídas"},
+          {"pending","Em aberto"},{"paid","Quitados"}};
+        HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setHorizontalScrollBarEnabled(false);
+        LinearLayout chips=horizontal();
+        for(String[] entry:filters){
+            TextView chip=button(entry[1],entry[0].equals(nfFilter)?PINK:Color.rgb(245,247,251),
+                 entry[0].equals(nfFilter)?WHITE:NAVY,()->{nfFilter=entry[0];nfFinanceView(nfLedger);});
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(41));lp.rightMargin=dp(6);
+            chips.addView(chip,lp);
+        }
+        horizontal.addView(chips);content.addView(horizontal);gap(content,10);
+        int visible=0;
+        for(JSONObject tx:monthly){
+            boolean income="income".equals(val(tx,"direction"));
+            String status=nfStatus(tx);
+            if("income".equals(nfFilter)&&!income)continue;
+            if("expense".equals(nfFilter)&&income)continue;
+            if("paid".equals(nfFilter)&&!("Pago".equals(status)||"Recebido".equals(status)))continue;
+            if("pending".equals(nfFilter)&&("Pago".equals(status)||"Recebido".equals(status)))continue;
+            visible++;
+            LinearLayout tile=card(content);
+            LinearLayout head=horizontal();head.setGravity(Gravity.CENTER_VERTICAL);
+            TextView direction=label(income?"↗ ENTRADA":"↘ SAÍDA",12,income?Color.rgb(18,132,101):Color.rgb(192,70,59),true);
+            head.addView(direction,new LinearLayout.LayoutParams(0,-2,1));
+            TextView badge=label(status,12,("Pago".equals(status)||"Recebido".equals(status))?Color.rgb(20,119,89):"Parcial".equals(status)?Color.rgb(167,113,18):MUTED,true);
+            head.addView(badge);tile.addView(head);gap(tile,7);
+            text(tile,val(tx,"title"),16,NAVY,true);
+            String detail=val(tx,"category");
+            String who=val(tx,"subject_name");
+            if(!who.isEmpty())detail+=" · "+who;
+            String due=val(tx,"due_on");
+            if(!due.isEmpty())detail+=" · Vence "+ncFromIso(due,false);
+            text(tile,detail,12,MUTED,false);gap(tile,7);
+            text(tile,"Valor total: "+nfMoney(nfAmount(tx,"amount")),14,NAVY,true);
+            text(tile,(income?"Recebido: ":"Pago: ")+nfMoney(nfAmount(tx,"paid_amount")),13,Color.rgb(21,121,93),true);
+            text(tile,(income?"A receber: ":"Falta pagar: ")+nfMoney(nfRemaining(tx)),13,Color.rgb(195,73,61),true);
+            gap(tile,9);
+            boolean linked=tx.optLong("source_list_id",0)>0;
+            final long id=tx.optLong("id",0);
+            LinearLayout actions=horizontal();
+            if(linked){
+                TextView from=button("🛒 Ver lista",Color.rgb(238,243,250),NAVY,()->navigate("shopping"));
+                actions.addView(from,new LinearLayout.LayoutParams(0,dp(42),1));
+            }else{
+                if(nfRemaining(tx).signum()>0){
+                    TextView pay=button(income?"＋ Receber":"✓ Registrar pagamento",Color.rgb(226,242,235),Color.rgb(15,103,81),
+                          ()->nfPaymentDialog(tx,false));
+                    actions.addView(pay,new LinearLayout.LayoutParams(0,dp(42),1));
+                }
+                TextView history=button("Histórico / Estornar",Color.rgb(240,241,249),NAVY,()->nfHistory(id,false));
+                LinearLayout.LayoutParams h=new LinearLayout.LayoutParams(0,dp(42),1.2f);h.leftMargin=dp(6);actions.addView(history,h);
+            }
+            tile.addView(actions);
+            if(!linked){
+                gap(tile,6);
+                TextView edit=button("✎ Editar lançamento",Color.rgb(247,248,252),NAVY,()->editFinance(tx));
+                tile.addView(edit,new LinearLayout.LayoutParams(-1,dp(39)));
+            }else text(tile,"Origem: lista de compras. Pagamentos devem ser corrigidos nos itens da lista.",11,MUTED,false);
+            gap(content,7);
+        }
+        if(visible==0){
+            LinearLayout blank=card(content);
+            text(blank,"Nenhum lançamento neste filtro para "+nfMonthTitle()+".",14,MUTED,false);
+        }
+        gap(content,12);
+        addButton(content,"▦ Abrir Planejamento mensal",Color.rgb(234,239,250),NAVY,()->navigate("finance-matrix"));
+    }
+    private boolean nfOnline(){
+        if(connected)return true;
+        msg("Conecte-se à internet para registrar ou estornar pagamentos.");
+        return false;
+    }
+    private void nfPaymentDialog(JSONObject tx,boolean matrix){
+        if(!nfOnline())return;
+        long tid=tx.optLong("transaction_id",tx.optLong("id",0));
+        if(tid<=0){msg("Este item ainda não tem lançamento. Defina o valor previsto primeiro.");return;}
+        if(tx.optInt("source_list",0)!=0||tx.optLong("source_list_id",0)>0){msg("Pagamento vinculado à lista. Ajuste os itens na lista original.");return;}
+        java.math.BigDecimal remaining=nfRemaining(tx);
+        if(remaining.signum()<=0){msg("Este lançamento já está quitado.");return;}
+        LinearLayout form=vertical();form.setPadding(dp(18),dp(8),dp(18),dp(8));
+        EditText amount=ncFormInput(form,"Valor a confirmar (R$)","Valor parcial ou total",
+                 remaining.setScale(2,java.math.RoundingMode.HALF_UP).toPlainString(),false);
+        amount.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText date=ncDateField(form,"Data do pagamento",today(),false);
+        String[] names={"PIX","Dinheiro","Débito","Crédito","Transferência","Boleto","Outro"};
+        String[] values={"pix","cash","debit_card","credit_card","transfer","boleto","other"};
+        Spinner method=ncChoice(form,"Forma de pagamento",names,0);
+        EditText notes=ncFormInput(form,"Observação (opcional)","Detalhes desta baixa","",false);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Confirmar "+("income".equals(val(tx,"direction"))?"recebimento":"pagamento"))
+          .setView(form).setNegativeButton("Cancelar",null).setPositiveButton("Confirmar",null).create();
+        dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            java.math.BigDecimal value=ncListDecimal(ncValue(amount),null);
+            String paidOn=ncToIso(ncValue(date),false);
+            if(value==null||value.signum()<=0||value.compareTo(remaining)>0){
+                amount.setError("Informe valor positivo até "+nfMoney(remaining));return;
+            }
+            if(paidOn==null||paidOn.isEmpty()){msg("Informe uma data válida.");return;}
+            android.widget.Button confirm=dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            confirm.setEnabled(false);
+            JSONObject payload=withHid(data("transaction_id",String.valueOf(tid),
+              "amount",value.setScale(2,java.math.RoundingMode.HALF_UP).toPlainString(),
+              "paid_on",paidOn,"payment_method",values[method.getSelectedItemPosition()],"notes",ncValue(notes)));
+            api.post("transaction_payment_add",payload,(response,error)->{
+                confirm.setEnabled(true);
+                if(error!=null){msg("Pagamento não registrado: "+error);return;}
+                dialog.dismiss();msg("Pagamento confirmado e histórico atualizado.");
+                if(matrix)nfLoadMatrix();else loadPage(false);
+            });
+        }));
+        dialog.show();
+    }
+    private void nfHistory(long tid,boolean matrix){
+        if(!nfOnline())return;
+        if(tid<=0)return;
+        if(matrix){
+            api.get("finance_matrix_payment_history",withHid(data("transaction_id",String.valueOf(tid))),
+               (response,error)->{
+                 if(error!=null){msg("Histórico indisponível: "+error);return;}
+                 nfShowPayments(tid,array(response,"payments"),true,response.optBoolean("legacy_paid",false));
+               });
+        }else{
+            api.get("transactions",withHid(new JSONObject()),(response,error)->{
+                if(error!=null){msg("Não foi possível consultar o histórico: "+error);return;}
+                JSONArray all=array(response,"payments"),chosen=new JSONArray();
+                for(int i=0;i<all.length();i++){
+                    JSONObject p=row(all,i);
+                    if(p.optLong("transaction_id",0)==tid)chosen.put(p);
+                }
+                boolean legacy=false;
+                JSONArray txs=array(response,"items");
+                for(int i=0;i<txs.length();i++){
+                    JSONObject tx=row(txs,i);
+                    if(tx.optLong("id",0)==tid && chosen.length()==0 &&
+                          "paid".equals(val(tx,"payment_status")))legacy=true;
+                }
+                nfShowPayments(tid,chosen,false,legacy);
+            });
+        }
+    }
+    private void nfShowPayments(long tid,JSONArray payments,boolean matrix,boolean legacy){
+        if(payments.length()==0){
+            if(legacy&&matrix){
+                new AlertDialog.Builder(this).setTitle("Pagamento antigo")
+                  .setMessage("Este lançamento foi marcado como quitado sem um histórico detalhado. Deseja desfazer apenas a marcação?")
+                  .setNegativeButton("Cancelar",null)
+                  .setPositiveButton("Desmarcar pago",(d,w)->nfUnmarkLegacy(tid)).show();
+            }else if(legacy)msg("Marcação antiga sem histórico. Abra a competência no Planejamento para desmarcar.");
+            else msg("Nenhum pagamento registrado neste lançamento.");
+            return;
+        }
+        String[] labels=new String[payments.length()];
+        for(int i=0;i<payments.length();i++){
+            JSONObject p=row(payments,i);
+            labels[i]=ncFromIso(val(p,"paid_on"),false)+" · "+nfMoney(nfAmount(p,"amount"))+" · "+val(p,"payment_method");
+        }
+        new AlertDialog.Builder(this).setTitle("Histórico — toque para estornar")
+          .setItems(labels,(d,index)->{
+            JSONObject p=row(payments,index);
+            long id=p.optLong("id",0);if(id<=0)return;
+            new AlertDialog.Builder(this).setTitle("Confirmar estorno")
+              .setMessage("Desfazer a baixa de "+nfMoney(nfAmount(p,"amount"))+
+                   " registrada em "+ncFromIso(val(p,"paid_on"),false)+"? O saldo pendente será recalculado.")
+              .setNegativeButton("Cancelar",null)
+              .setPositiveButton("Estornar",(d2,w)->nfReverse(id,matrix)).show();
+          }).setNegativeButton("Fechar",null).show();
+    }
+    private void nfReverse(long paymentId,boolean matrix){
+        if(!nfOnline())return;
+        String action=matrix?"finance_matrix_payment_reverse":"transaction_payment_delete";
+        api.post(action,withHid(data("payment_id",String.valueOf(paymentId))),(result,error)->{
+            if(error!=null){msg("Não foi possível estornar: "+error);return;}
+            msg("Estorno confirmado. Saldo recalculado.");
+            if(matrix)nfLoadMatrix();else loadPage(false);
+        });
+    }
+    private void nfUnmarkLegacy(long id){
+        if(!nfOnline())return;
+        api.post("finance_matrix_unmark_manual_paid",withHid(data("transaction_id",String.valueOf(id))),
+          (json,error)->{
+            if(error!=null){msg("Não foi possível desmarcar: "+error);return;}
+            msg("Marcação antiga desfeita.");nfLoadMatrix();
+          });
+    }
+    private void nfLoadMatrix(){
+        if(!page.equals("finance-matrix")||content==null)return;
+        int seq=++nfMatrixSeq;
+        content.removeAllViews();nfHeader(true);
+        text(content,"Carregando planejamento...",13,MUTED,false);
+        JSONObject payload=withHid(data("start",nfMonth,"months","5"));
+        api.get("finance_matrix",payload,(data,error)->{
+            if(seq!=nfMatrixSeq||!page.equals("finance-matrix")||content==null)return;
+            if(error!=null){
+                content.removeAllViews();nfHeader(true);
+                text(content,"Não foi possível consultar o Planejamento: "+error,14,PINK,false);
+                addButton(content,"Tentar novamente",Color.rgb(237,241,248),NAVY,this::nfLoadMatrix);
+                return;
+            }
+            nfRenderMatrix(data);
+        });
+    }
+    private void nfRenderMatrix(JSONObject data){
+        if(!page.equals("finance-matrix")||content==null)return;
+        content.removeAllViews();nfHeader(true);
+        addButton(content,"＋ Nova linha no Planejamento",PINK,WHITE,()->nfMatrixNewRow());
+        gap(content,13);
+        JSONArray rows=array(data,"rows"),cells=array(data,"cells");
+        java.util.HashMap<Long,JSONObject> selected=new java.util.HashMap<>();
+        for(int i=0;i<cells.length();i++){
+            JSONObject c=row(cells,i);
+            String date=val(c,"month");
+            if(date.length()>=7&&nfMonth.equals(date.substring(0,7)))
+                selected.put(c.optLong("row_id",0),c);
+        }
+        java.math.BigDecimal in=nfMoney0(),out=nfMoney0(),recv=nfMoney0(),paid=nfMoney0();
+        int active=0;
+        for(int i=0;i<rows.length();i++){
+            JSONObject r=row(rows,i),cell=selected.get(r.optLong("id",0));
+            if(cell==null)continue;
+            java.math.BigDecimal amount=nfAmount(cell,"amount");
+            if(amount.signum()<=0)continue;
+            java.math.BigDecimal done=nfAmount(cell,"paid_amount").min(amount);
+            if("income".equals(val(r,"direction"))){in=in.add(amount);recv=recv.add(done);}
+            else {out=out.add(amount);paid=paid.add(done);}
+            active++;
+        }
+        nfTotals(in,recv,out,paid);gap(content,12);
+        text(content,"Competências do mês",17,NAVY,true);gap(content,8);
+        if(data.optBoolean("rows_truncated",false)){
+            text(content,"Há mais de mil linhas; utilize a versão web para visualizar todas.",12,PINK,true);
+        }
+        int displayed=0;
+        for(int i=0;i<rows.length();i++){
+            JSONObject r=row(rows,i);
+            long rowId=r.optLong("id",0);
+            JSONObject cell=selected.get(rowId);
+            boolean virtual=rowId<0||r.optLong("source_item_id",0)>0;
+            boolean hasCell=cell!=null && nfAmount(cell,"amount").signum()>0;
+            if(!hasCell&&!(!virtual&&i<50))continue;
+            displayed++;
+            LinearLayout tile=card(content);
+            boolean income="income".equals(val(r,"direction"));
+            text(tile,(income?"↗ ENTRADA":"↘ SAÍDA")+
+              (val(r,"subject_name").isEmpty()?"":" · "+val(r,"subject_name")),
+              11,income?Color.rgb(17,122,92):Color.rgb(194,75,64),true);
+            gap(tile,5);
+            text(tile,val(r,"title"),16,NAVY,true);
+            String info=val(r,"category_label");
+            if(info.isEmpty())info=val(r,"category");
+            if(!info.isEmpty())text(tile,info,12,MUTED,false);
+            if(hasCell){
+                java.math.BigDecimal total=nfAmount(cell,"amount");
+                java.math.BigDecimal done=nfAmount(cell,"paid_amount").min(total);
+                java.math.BigDecimal remain=total.subtract(done).max(nfMoney0());
+                gap(tile,5);
+                text(tile,"Previsto: "+nfMoney(total),14,NAVY,true);
+                text(tile,(income?"Recebido: ":"Pago: ")+nfMoney(done),13,Color.rgb(17,125,94),true);
+                text(tile,(income?"A receber: ":"Falta pagar: ")+nfMoney(remain),13,Color.rgb(192,74,62),true);
+                if(virtual||cell.optInt("source_list",0)>0){
+                    gap(tile,6);text(tile,"✓ Item pago de lista. Ajuste pagamentos na lista original.",11,MUTED,false);
+                    TextView open=button("Abrir listas",Color.rgb(237,242,248),NAVY,()->navigate("shopping"));
+                    tile.addView(open,new LinearLayout.LayoutParams(-1,dp(42)));
+                }else{
+                    long tid=cell.optLong("transaction_id",0);
+                    LinearLayout actions=horizontal();
+                    TextView edit=button("✎ Valor / data",Color.rgb(239,242,250),NAVY,()->nfEditCell(r,cell));
+                    actions.addView(edit,new LinearLayout.LayoutParams(0,dp(42),1));
+                    if(tid>0&&remain.signum()>0){
+                        JSONObject payTx=new JSONObject();
+                        try {
+                            payTx.put("transaction_id",tid);
+                            payTx.put("title",val(r,"title"));
+                            payTx.put("amount",total);
+                            payTx.put("paid_amount",done);
+                            payTx.put("direction",val(r,"direction"));
+                        }catch(Exception ignore){}
+                        TextView pay=button(income?"＋ Receber":"✓ Pagar",Color.rgb(227,242,235),Color.rgb(15,108,82),
+                             ()->nfPaymentDialog(payTx,true));
+                        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(42),1);p.leftMargin=dp(5);
+                        actions.addView(pay,p);
+                    }
+                    tile.addView(actions);
+                    if(tid>0){
+                        gap(tile,6);
+                        TextView history=button("Histórico e estornos",Color.rgb(250,250,252),NAVY,()->nfHistory(tid,true));
+                        tile.addView(history,new LinearLayout.LayoutParams(-1,dp(40)));
+                    }
+                }
+            }else{
+                text(tile,"Sem previsão neste mês.",12,MUTED,false);
+                TextView add=button("＋ Planejar valor",Color.rgb(233,243,249),NAVY,()->nfEditCell(r,null));
+                tile.addView(add,new LinearLayout.LayoutParams(-1,dp(42)));
+            }
+            gap(content,7);
+        }
+        if(displayed==0){
+            LinearLayout blank=card(content);
+            text(blank,"Nenhum valor planejado em "+nfMonthTitle()+". Crie uma linha ou escolha outro mês.",14,MUTED,false);
+        }
+        if(active>0)text(content,"As listas aparecem como itens pagos, sem duplicar o lançamento original no Planejamento.",11,MUTED,false);
+    }
+    private void nfMatrixNewRow(){
+        if(!nfOnline())return;
+        LinearLayout form=vertical();form.setPadding(dp(18),dp(8),dp(18),dp(8));
+        EditText title=ncFormInput(form,"Descrição *","Ex.: Salário, Aluguel, Energia","",false);
+        Spinner direction=ncChoice(form,"Tipo",new String[]{"↗ Entrada","↘ Saída"},1);
+        EditText value=ncFormInput(form,"Valor previsto neste mês (R$)","Ex.: 500,00","",false);
+        value.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText due=ncFormInput(form,"Dia do vencimento","10","10",false);
+        due.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Nova linha — "+nfMonthTitle())
+           .setView(form).setNegativeButton("Cancelar",null).setPositiveButton("Criar",null).create();
+        dlg.setOnShowListener(ignored->dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String name=ncValue(title);
+            java.math.BigDecimal amount=ncListDecimal(ncValue(value),null);
+            int day=0;try{day=Integer.parseInt(ncValue(due));}catch(Exception e){}
+            if(name.isEmpty()){title.setError("Informe a descrição");return;}
+            if(amount==null||amount.signum()<=0){value.setError("Informe valor positivo");return;}
+            if(day<1||day>31){due.setError("Dia entre 1 e 31");return;}
+            String dir=direction.getSelectedItemPosition()==0?"income":"expense";
+            String cat=dir.equals("income")?"other_income":"home";
+            android.widget.Button confirm=dlg.getButton(AlertDialog.BUTTON_POSITIVE);
+            confirm.setEnabled(false);
+            final int dayFinal=day;
+            api.post("finance_matrix_row_save",withHid(data("title",name,"direction",dir,"category",cat)),
+              (result,error)->{
+                if(error!=null){confirm.setEnabled(true);msg("Não foi possível criar: "+error);return;}
+                long rowId=result.optLong("id",0);
+                if(rowId<=0){confirm.setEnabled(true);msg("O servidor não retornou o identificador da linha.");return;}
+                api.post("finance_matrix_cell_save",withHid(data("row_id",String.valueOf(rowId),"month",nfMonth,
+                    "amount",amount.toPlainString(),"due_day",String.valueOf(dayFinal))), (saved,fail)->{
+                    confirm.setEnabled(true);dlg.dismiss();
+                    if(fail!=null)msg("Linha criada, mas a previsão não foi salva. Edite a linha: "+fail);
+                    else msg("Previsão criada com sucesso.");
+                    nfLoadMatrix();
+                });
+              });
+        }));
+        dlg.show();
+    }
+    private void nfEditCell(JSONObject r,JSONObject cell){
+        if(!nfOnline())return;
+        if(r.optLong("id",0)<1){msg("Item de lista: edite na lista original.");return;}
+        LinearLayout form=vertical();form.setPadding(dp(18),dp(8),dp(18),dp(8));
+        EditText amount=ncFormInput(form,"Valor previsto (R$)","Valor deste mês",cell==null?"":nfAmount(cell,"amount").toPlainString(),false);
+        amount.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText day=ncFormInput(form,"Dia do vencimento","Ex.: 10",cell==null?"10":val(cell,"due_day"),false);
+        day.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        EditText notes=ncFormInput(form,"Observações","Detalhes da competência",cell==null?"":val(cell,"notes"),true);
+        AlertDialog dlg=new AlertDialog.Builder(this).setTitle(val(r,"title")+" · "+nfMonthTitle())
+           .setView(form).setNegativeButton("Cancelar",null).setPositiveButton("Salvar",null).create();
+        dlg.setOnShowListener(ignored->dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            java.math.BigDecimal value=ncListDecimal(ncValue(amount),null);
+            int due=0;try{due=Integer.parseInt(ncValue(day));}catch(Exception e){}
+            if(value==null||value.signum()<0){amount.setError("Valor inválido");return;}
+            if(due<1||due>31){day.setError("Dia entre 1 e 31");return;}
+            if(cell!=null&&value.compareTo(nfAmount(cell,"paid_amount"))<0){
+                amount.setError("Não pode ser menor que o valor já pago");return;
+            }
+            android.widget.Button submit=dlg.getButton(AlertDialog.BUTTON_POSITIVE);
+            submit.setEnabled(false);
+            api.post("finance_matrix_cell_save",withHid(data("row_id",val(r,"id"),"month",nfMonth,
+                  "amount",value.toPlainString(),"due_day",String.valueOf(due),"notes",ncValue(notes))),
+              (saved,error)->{
+                submit.setEnabled(true);
+                if(error!=null){msg("Não foi possível salvar: "+error);return;}
+                dlg.dismiss();msg("Competência atualizada.");nfLoadMatrix();
+              });
+        }));
+        dlg.show();
+    }
