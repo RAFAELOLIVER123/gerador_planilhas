@@ -1,0 +1,454 @@
+
+    // NOSSO COMBINADO 2.1.14 - Telas nativas: listas completas e comparador.
+    private final android.os.Handler ncUiHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private String ncPriceCategory="market";
+    private int ncPriceRequest=0;
+    private EditText ncPriceQuery;
+    private LinearLayout ncPriceContent;
+
+    private EditText ncFormInput(LinearLayout dest,String title,String hint,String value,boolean multi) {
+        TextView heading=label(title,13,NAVY,true);
+        heading.setPadding(0,dp(14),0,dp(5));dest.addView(heading);
+        EditText field=new EditText(this);
+        field.setSingleLine(!multi);field.setTextSize(15);field.setTextColor(NAVY);
+        field.setHint(hint);field.setHintTextColor(Color.rgb(128,138,156));
+        field.setPadding(dp(13),dp(10),dp(13),dp(10));
+        field.setBackground(shape(Color.WHITE,12));
+        field.setText(value==null?"":value);
+        if(multi){field.setMinLines(3);field.setGravity(Gravity.TOP);}
+        dest.addView(field,new LinearLayout.LayoutParams(-1,-2));
+        return field;
+    }
+    private Spinner ncChoice(LinearLayout dest,String title,String[] options,int selected) {
+        TextView heading=label(title,13,NAVY,true);
+        heading.setPadding(0,dp(12),0,dp(5));dest.addView(heading);
+        Spinner chooser=new Spinner(this);
+        android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<String>(this,
+            android.R.layout.simple_spinner_item,options);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        chooser.setAdapter(adapter);
+        chooser.setSelection(Math.max(0,Math.min(options.length-1,selected)));
+        chooser.setBackground(shape(Color.WHITE,12));
+        chooser.setPadding(dp(8),dp(6),dp(8),dp(6));
+        dest.addView(chooser,new LinearLayout.LayoutParams(-1,dp(52)));
+        return chooser;
+    }
+    private String ncValue(EditText e){return e.getText().toString().trim();}
+    private String ncToIso(String raw,boolean time){
+        String value=raw==null?"":raw.trim();
+        if(value.isEmpty())return "";
+        try{
+            String format=time?"dd/MM/yyyy HH:mm":"dd/MM/yyyy";
+            java.text.SimpleDateFormat pt=new java.text.SimpleDateFormat(format,new java.util.Locale("pt","BR"));
+            pt.setLenient(false);
+            java.util.Date date=pt.parse(value);
+            if(!pt.format(date).equals(value))return null;
+            java.text.SimpleDateFormat iso=new java.text.SimpleDateFormat(time?"yyyy-MM-dd HH:mm:ss":"yyyy-MM-dd",java.util.Locale.US);
+            return iso.format(date);
+        }catch(Exception err){return null;}
+    }
+    private String ncFromIso(String raw,boolean time){
+        if(raw==null||raw.length()<10)return "";
+        try{
+            String value=raw.trim().replace('T',' ');
+            if(time && value.length()==16)value+=":00";
+            java.text.SimpleDateFormat iso=new java.text.SimpleDateFormat(time?"yyyy-MM-dd HH:mm:ss":"yyyy-MM-dd",java.util.Locale.US);
+            iso.setLenient(false);
+            java.util.Date date=iso.parse(time?value.substring(0,19):value.substring(0,10));
+            return new java.text.SimpleDateFormat(time?"dd/MM/yyyy HH:mm":"dd/MM/yyyy",new java.util.Locale("pt","BR")).format(date);
+        }catch(Exception e){return raw;}
+    }
+    private void ncPickDate(EditText field,boolean withTime){
+        java.util.Calendar cal=java.util.Calendar.getInstance();
+        android.app.DatePickerDialog picker=new android.app.DatePickerDialog(this,(view,year,month,day)->{
+            cal.set(year,month,day);
+            if(withTime){
+                new android.app.TimePickerDialog(this,(v,h,m)->{
+                    cal.set(java.util.Calendar.HOUR_OF_DAY,h);cal.set(java.util.Calendar.MINUTE,m);
+                    field.setText(new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm",new java.util.Locale("pt","BR")).format(cal.getTime()));
+                },cal.get(java.util.Calendar.HOUR_OF_DAY),cal.get(java.util.Calendar.MINUTE),true).show();
+            }else field.setText(new java.text.SimpleDateFormat("dd/MM/yyyy",new java.util.Locale("pt","BR")).format(cal.getTime()));
+        },cal.get(java.util.Calendar.YEAR),cal.get(java.util.Calendar.MONTH),cal.get(java.util.Calendar.DAY_OF_MONTH));
+        picker.show();
+    }
+    private EditText ncDateField(LinearLayout dest,String title,String value,boolean withTime){
+        EditText field=ncFormInput(dest,title,withTime?"Selecione data e hora":"Selecione a data",
+              ncFromIso(value,withTime),false);
+        field.setFocusable(false);field.setClickable(true);
+        field.setCompoundDrawablesWithIntrinsicBounds(0,0,android.R.drawable.ic_menu_my_calendar,0);
+        field.setOnClickListener(v->ncPickDate(field,withTime));
+        return field;
+    }
+    private static final class NcProductInput {
+        EditText title,quantity,price,brand;
+        Spinner unit;
+        LinearLayout container;
+    }
+    private void ncSuggest(AutoCompleteTextView input,String type,java.util.function.Supplier<String> getCategory){
+        input.setThreshold(2);
+        input.addTextChangedListener(new android.text.TextWatcher(){
+            Runnable pending;
+            public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            public void onTextChanged(CharSequence s,int start,int before,int count){
+                if(pending!=null)ncUiHandler.removeCallbacks(pending);
+                final String term=s.toString().trim();
+                if(term.length()<2)return;
+                pending=()->{
+                    if(!input.hasFocus()||!ncValue(input).equals(term))return;
+                    JSONObject query=withHid(data("type",type,"kind",getCategory.get(),"q",term));
+                    api.get("price_catalog_search",query,(json,error)->{
+                        if(error!=null||!input.hasFocus()||!ncValue(input).equals(term))return;
+                        JSONArray suggestions=array(json,"items");
+                        java.util.LinkedHashSet<String> names=new java.util.LinkedHashSet<>();
+                        for(int i=0;i<suggestions.length();i++){
+                            String name=val(row(suggestions,i),"name").trim();
+                            if(!name.isEmpty()&&name.length()<=180)names.add(name);
+                        }
+                        if(names.isEmpty())return;
+                        android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<>(
+                          MainActivity.this,android.R.layout.simple_dropdown_item_1line,
+                          new java.util.ArrayList<>(names));
+                        input.setAdapter(adapter);
+                        input.showDropDown();
+                    });
+                };
+                ncUiHandler.postDelayed(pending,320);
+            }
+            public void afterTextChanged(android.text.Editable e){}
+        });
+    }
+    private void ncNewProductInput(LinearLayout parent,java.util.ArrayList<NcProductInput> inputs,Spinner category) {
+        if(inputs.size()>=100){msg("Limite de 100 produtos por lista.");return;}
+        NcProductInput item=new NcProductInput();
+        LinearLayout box=vertical();box.setPadding(dp(12),dp(12),dp(12),dp(12));
+        box.setBackground(shape(Color.WHITE,13));
+        LinearLayout.LayoutParams outer=new LinearLayout.LayoutParams(-1,-2);
+        outer.bottomMargin=dp(10);parent.addView(box,outer);item.container=box;
+        LinearLayout bar=horizontal();bar.setGravity(Gravity.CENTER_VERTICAL);
+        TextView heading=label("Produto "+(inputs.size()+1),13,NAVY,true);
+        bar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        TextView remove=button("×",Color.rgb(251,234,231),PINK,()->{
+            if(inputs.size()<=1){item.title.setText("");item.quantity.setText("1");item.price.setText("");return;}
+            parent.removeView(box);inputs.remove(item);
+        });
+        remove.setTextSize(21);
+        bar.addView(remove,new LinearLayout.LayoutParams(dp(44),dp(41)));
+        box.addView(bar);
+        AutoCompleteTextView name=new AutoCompleteTextView(this);
+        name.setSingleLine(true);name.setHint("Produto ou material");
+        name.setTextSize(15);name.setTextColor(NAVY);
+        name.setPadding(dp(10),dp(11),dp(10),dp(11));name.setBackground(shape(Color.rgb(248,249,252),11));
+        box.addView(name,new LinearLayout.LayoutParams(-1,dp(47)));
+        item.title=name;
+        String[] catCodes={"market","pharmacy","school","home","other","vehicle","bills"};
+        ncSuggest(name,"products",()->catCodes[category.getSelectedItemPosition()]);
+        LinearLayout row=horizontal();row.setPadding(0,dp(9),0,0);
+        item.quantity=new EditText(this);item.quantity.setSingleLine(true);
+        item.quantity.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        item.quantity.setText("1");item.quantity.setTextSize(15);item.quantity.setHint("Quantidade");
+        item.quantity.setBackground(shape(Color.rgb(248,249,252),11));item.quantity.setPadding(dp(8),0,dp(8),0);
+        row.addView(item.quantity,new LinearLayout.LayoutParams(0,dp(45),1.2f));
+        String[] units={"UN","KG","G","L","ML","PCT","FD","CX","PAR"};
+        item.unit=new Spinner(this);
+        android.widget.ArrayAdapter<String> unitAdapter=new android.widget.ArrayAdapter<String>(this,
+           android.R.layout.simple_spinner_item,units);
+        unitAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        item.unit.setAdapter(unitAdapter);
+        row.addView(item.unit,new LinearLayout.LayoutParams(0,dp(45),1f));
+        item.price=new EditText(this);item.price.setSingleLine(true);
+        item.price.setHint("R$ / un.");
+        item.price.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        item.price.setTextSize(14);item.price.setPadding(dp(8),0,dp(8),0);
+        item.price.setBackground(shape(Color.rgb(248,249,252),11));
+        row.addView(item.price,new LinearLayout.LayoutParams(0,dp(45),1.3f));
+        box.addView(row);
+        item.brand=ncFormInput(box,"Marca (opcional)","Ex.: fabricante / apresentação","",false);
+        inputs.add(item);
+    }
+    private void ncNativeListForm(JSONObject current) {
+        if(userId.isEmpty()||householdId.isEmpty()){msg("Entre na família para criar listas.");return;}
+        final boolean editing=current!=null && current.optLong("id")>0;
+        final android.app.Dialog dialog=new android.app.Dialog(this);
+        LinearLayout root=vertical();root.setBackgroundColor(Color.rgb(247,249,253));
+        LinearLayout top=horizontal();top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setPadding(dp(18),dp(14),dp(12),dp(10));top.setBackgroundColor(Color.WHITE);
+        LinearLayout headings=vertical();
+        headings.addView(label(editing?"Editar lista":"Nova lista de compras",21,NAVY,true));
+        headings.addView(label("Organize os produtos, horários e pagamentos.",12,MUTED,false));
+        top.addView(headings,new LinearLayout.LayoutParams(0,-2,1));
+        TextView close=button("×",Color.rgb(244,245,248),NAVY,()->dialog.dismiss());
+        close.setTextSize(22);top.addView(close,new LinearLayout.LayoutParams(dp(42),dp(42)));
+        root.addView(top);
+        ScrollView scroller=new ScrollView(this);
+        scroller.setFillViewport(false);
+        LinearLayout fields=vertical();fields.setPadding(dp(18),dp(8),dp(18),dp(18));
+        scroller.addView(fields);
+        root.addView(scroller,new LinearLayout.LayoutParams(-1,0,1));
+
+        EditText title=ncFormInput(fields,"Nome da lista *","Ex.: Compras do mês",val(current,"title"),false);
+        final String[] categories={"market","pharmacy","school","home","other","vehicle","bills"};
+        final String[] labels={"🛒 Supermercado","💊 Farmácia","🎒 Escola","🏠 Casa","📋 Outros","🚗 Veículos e combustível","🧾 Contas e assinaturas"};
+        String requested=editing?val(current,"category"):category();
+        int selected=0;for(int i=0;i<categories.length;i++)if(categories[i].equals(requested))selected=i;
+        Spinner cat=ncChoice(fields,"Categoria",labels,selected);
+
+        TextView storeCaption=label("Estabelecimento (opcional)",13,NAVY,true);
+        storeCaption.setPadding(0,dp(13),0,dp(6));fields.addView(storeCaption);
+        AutoCompleteTextView store=new AutoCompleteTextView(this);
+        store.setHint("Pesquisar ou digitar estabelecimento");
+        store.setThreshold(2);store.setSingleLine(true);
+        store.setTextSize(15);store.setTextColor(NAVY);
+        store.setPadding(dp(12),dp(10),dp(12),dp(10));
+        store.setBackground(shape(Color.WHITE,12));store.setText(val(current,"store_name"));
+        fields.addView(store,new LinearLayout.LayoutParams(-1,dp(50)));
+        ncSuggest(store,"merchants",()->categories[cat.getSelectedItemPosition()]);
+        TextView otherButton=button("＋ OUTRO ESTABELECIMENTO",Color.rgb(232,238,253),NAVY,()->{});
+        LinearLayout.LayoutParams op=new LinearLayout.LayoutParams(-1,dp(45));op.topMargin=dp(8);fields.addView(otherButton,op);
+        EditText newStore=ncFormInput(fields,"Nome do outro estabelecimento","Digite o nome comercial","",false);
+        newStore.setVisibility(View.GONE);
+        otherButton.setOnClickListener(v->{
+            boolean show=newStore.getVisibility()!=View.VISIBLE;
+            newStore.setVisibility(show?View.VISIBLE:View.GONE);
+            otherButton.setText(show?"✓ USAR ESTABELECIMENTO INFORMADO":"＋ OUTRO ESTABELECIMENTO");
+            if(show)newStore.requestFocus();
+        });
+
+        EditText planned=ncDateField(fields,"Data planejada",val(current,"planned_for"),false);
+        EditText start=ncDateField(fields,"Início das compras",val(current,"start_at"),true);
+        EditText end=ncDateField(fields,"Fim previsto",val(current,"end_at"),true);
+        TextView alarmTitle=label("Alarme da lista",15,NAVY,true);
+        alarmTitle.setPadding(0,dp(18),0,dp(4));fields.addView(alarmTitle);
+        android.widget.CheckBox enabled=new android.widget.CheckBox(this);
+        enabled.setText("Ativar alarme");
+        enabled.setTextSize(14);enabled.setChecked("1".equals(val(current,"alarm_enabled")));
+        fields.addView(enabled);
+        EditText alarm=ncDateField(fields,"Data e hora do alarme",val(current,"alarm_at"),true);
+        alarm.setVisibility(enabled.isChecked()?View.VISIBLE:View.GONE);
+        enabled.setOnCheckedChangeListener((v,checked)->alarm.setVisibility(checked?View.VISIBLE:View.GONE));
+        EditText notes=ncFormInput(fields,"Observações","Detalhes para a família...",val(current,"notes"),true);
+
+        TextView subheading=label("🧺 Subitens da lista",17,NAVY,true);
+        subheading.setPadding(0,dp(21),0,dp(2));fields.addView(subheading);
+        fields.addView(label("Quantidade de compra e preço por unidade ou embalagem.",12,MUTED,false));
+        LinearLayout listRows=vertical();
+        LinearLayout.LayoutParams rowsParams=new LinearLayout.LayoutParams(-1,-2);
+        rowsParams.topMargin=dp(12);fields.addView(listRows,rowsParams);
+        java.util.ArrayList<NcProductInput> products=new java.util.ArrayList<>();
+        ncNewProductInput(listRows,products,cat);
+        TextView addRow=button("＋ Adicionar outro subitem",Color.rgb(230,239,246),NAVY,
+          ()->ncNewProductInput(listRows,products,cat));
+        LinearLayout.LayoutParams addParams=new LinearLayout.LayoutParams(-1,dp(49));
+        addParams.topMargin=dp(8);fields.addView(addRow,addParams);
+
+        LinearLayout footer=horizontal();footer.setPadding(dp(16),dp(10),dp(16),dp(12));
+        footer.setBackgroundColor(Color.WHITE);
+        TextView cancel=button("Cancelar",Color.rgb(243,245,248),NAVY,()->dialog.dismiss());
+        footer.addView(cancel,new LinearLayout.LayoutParams(0,dp(53),1));
+        TextView save=button(editing?"Salvar alterações":"Criar lista",PINK,WHITE,()->{});
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,dp(53),1.6f);sp.leftMargin=dp(8);
+        footer.addView(save,sp);root.addView(footer);
+        save.setOnClickListener(v->{
+            String name=ncValue(title);
+            if(name.isEmpty()){title.setError("Informe o nome da lista");title.requestFocus();return;}
+            String date=ncToIso(ncValue(planned),false);
+            String startAt=ncToIso(ncValue(start),true);
+            String endAt=ncToIso(ncValue(end),true);
+            String alarmAt=ncToIso(ncValue(alarm),true);
+            if(date==null||startAt==null||endAt==null||(enabled.isChecked()&&(alarmAt==null||alarmAt.isEmpty()))){
+                msg("Confira o formato das datas e o horário do alarme.");return;
+            }
+            if(!startAt.isEmpty()&&!endAt.isEmpty()&&startAt.compareTo(endAt)>=0){
+                msg("O fim previsto deve ser posterior ao início.");return;
+            }
+            JSONArray initial=new JSONArray();
+            for(NcProductInput item:products){
+                String product=ncValue(item.title);
+                if(product.isEmpty())continue;
+                String quantity=ncValue(item.quantity).replace(',','.');
+                String value=ncValue(item.price).replace(',','.');
+                if(product.length()>180){item.title.setError("Máximo 180 caracteres");return;}
+                try{
+                    double q=Double.parseDouble(quantity);
+                    if(q<=0||q>100000)throw new Exception();
+                    JSONObject sub=new JSONObject();
+                    sub.put("title",product);sub.put("quantity",q);
+                    sub.put("unit",item.unit.getSelectedItem().toString().toLowerCase(java.util.Locale.ROOT));
+                    sub.put("brand",ncValue(item.brand));
+                    if(!value.isEmpty()){
+                        double p=Double.parseDouble(value);
+                        if(p<0||p>9999999)throw new Exception();
+                        sub.put("unit_price",p);
+                    }
+                    initial.put(sub);
+                }catch(Exception error){msg("Confira quantidade e valor do produto "+product);return;}
+            }
+            String merchant=(newStore.getVisibility()==View.VISIBLE&& !ncValue(newStore).isEmpty())
+                 ?ncValue(newStore):ncValue(store);
+            JSONObject payload=withHid(data("title",name,"category",categories[cat.getSelectedItemPosition()],
+                "planned_for",date,"start_at",startAt,"end_at",endAt,
+                "alarm_at",enabled.isChecked()?alarmAt:"","store_name",merchant,
+                "notes",ncValue(notes),"alarm_enabled",enabled.isChecked()?"1":"0"));
+            if(editing)try{payload.put("id",current.optLong("id"));}catch(Exception ignore){}
+            try{payload.put("initial_items",initial);}catch(Exception ignore){}
+            save.setEnabled(false);
+            api.post("list_save",payload,(result,error)->{
+                save.setEnabled(true);
+                if(error!=null){msg("Não foi possível salvar a lista: "+error);return;}
+                long id=result.optLong("id",0);
+                if(id<=0){msg("Não foi possível confirmar a lista no servidor.");return;}
+                if(enabled.isChecked()){
+                    NcListAlarmReceiver.schedule(MainActivity.this,id,name,alarmAt);
+                }else NcListAlarmReceiver.cancel(MainActivity.this,id);
+                dialog.dismiss();
+                msg("Lista salva com sucesso.");
+                if(page.equals("shopping")||page.equals("pharmacy")||page.equals("school")||
+                   page.equals("vehicle")||page.equals("bills")){
+                    loadPage(false);
+                }else navigate("shopping");
+            });
+        });
+        dialog.setContentView(root);
+        dialog.show();
+        android.view.Window window=dialog.getWindow();
+        if(window!=null){
+            window.setBackgroundDrawableResource(android.R.color.transparent);
+            window.setLayout(-1,-1);
+            window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+    }
+    private void ncToolsMenu() {
+        String[] titles={"🛒 Nova lista","🛒 Compras e listas","💊 Farmácia","🎒 Escola","🚗 Veículos",
+            "📊 Comparador de preços","R$ Financeiro","▦ Planejamento mensal",
+            "✓ Tarefas","▦ Agenda","💬 Chat da família","✉ Chat privado","📍 Mapa",
+            "🏠 Família","✎ Notas","★ Rede","▣ Documentos","⚙ Configurações"};
+        new android.app.AlertDialog.Builder(this).setTitle("Todas as ferramentas")
+          .setItems(titles,(dialog,index)->{
+              switch(index){
+                  case 0:ncNativeListForm(null);break;
+                  case 1:navigate("shopping");break;
+                  case 2:navigate("pharmacy");break;
+                  case 3:navigate("school");break;
+                  case 4:navigate("vehicle");break;
+                  case 5:navigate("price-compare");break;
+                  case 6:navigate("finance");break;
+                  case 7:ncOpenPortal("finance-matrix");break;
+                  case 8:navigate("tasks");break;
+                  case 9:navigate("calendar");break;
+                  case 10:navigate("chat");break;
+                  case 11:navigate("messages");break;
+                  case 12:navigate("map");break;
+                  case 13:navigate("members");break;
+                  case 14:navigate("notes");break;
+                  case 15:navigate("network");break;
+                  case 16:navigate("documents");break;
+                  default:navigate("more");
+              }
+          }).show();
+    }
+    private void ncComparePage(){
+        content.removeAllViews();
+        sectionTitle("📊 Comparador de preços","Compare preços compartilhados sem sair do aplicativo.");
+        addButton(content,"＋ Nova lista de compras",PINK,WHITE,()->ncNativeListForm(null));
+        gap(content,12);
+        HorizontalScrollView tabs=new HorizontalScrollView(this);
+        tabs.setHorizontalScrollBarEnabled(false);
+        LinearLayout chips=horizontal();
+        String[][] kinds={{"market","🛒 Mercado"},{"pharmacy","💊 Farmácia"},
+           {"school","🎒 Escola"},{"vehicle","🚗 Veículos"},{"other","📋 Outros"}};
+        for(String[] kind:kinds){
+            String key=kind[0];
+            TextView chip=button(kind[1],key.equals(ncPriceCategory)?PINK:Color.rgb(242,245,252),
+                                key.equals(ncPriceCategory)?WHITE:NAVY,()->{
+                ncPriceCategory=key;ncPriceRequest++;
+                ncComparePage();
+            });
+            LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,dp(42));
+            params.rightMargin=dp(7);chips.addView(chip,params);
+        }
+        tabs.addView(chips);content.addView(tabs);
+        ncPriceQuery=edit("Buscar produto ou serviço",false);
+        ncPriceQuery.setSingleLine(true);
+        ncPriceQuery.setTextSize(15);
+        LinearLayout.LayoutParams qparams=new LinearLayout.LayoutParams(-1,dp(52));
+        qparams.topMargin=dp(11);content.addView(ncPriceQuery,qparams);
+        ncPriceContent=vertical();
+        LinearLayout.LayoutParams resultParams=new LinearLayout.LayoutParams(-1,-2);
+        resultParams.topMargin=dp(13);content.addView(ncPriceContent,resultParams);
+        ncPriceQuery.addTextChangedListener(new android.text.TextWatcher(){
+            Runnable pending;
+            public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            public void onTextChanged(CharSequence s,int start,int before,int count){
+                if(pending!=null)ncUiHandler.removeCallbacks(pending);
+                pending=()->ncLoadPrices();
+                ncUiHandler.postDelayed(pending,340);
+            }
+            public void afterTextChanged(android.text.Editable e){}
+        });
+        ncLoadPrices();
+    }
+    private void ncLoadPrices(){
+        if(ncPriceContent==null||ncPriceQuery==null||!page.equals("price-compare"))return;
+        int request=++ncPriceRequest;
+        final LinearLayout target=ncPriceContent;
+        target.removeAllViews();
+        text(target,"Consultando preços publicados...",13,MUTED,false);
+        final String query=ncValue(ncPriceQuery);
+        api.get("price_compare",withHid(data("kind",ncPriceCategory,"q",query)),(json,error)->{
+            if(request!=ncPriceRequest||ncPriceContent!=target||!page.equals("price-compare"))return;
+            target.removeAllViews();
+            if(error!=null){text(target,"Não foi possível consultar preços: "+error,14,PINK,false);return;}
+            JSONArray quotes=array(json,"items");
+            if(quotes.length()==0){
+                text(target,"Nenhuma cotação nesta pesquisa.",17,NAVY,true);
+                text(target,"Os preços aparecem quando uma lista é salva com estabelecimento e preço unitário.",13,MUTED,false);
+                return;
+            }
+            java.util.LinkedHashMap<String,java.util.ArrayList<JSONObject>> groups=new java.util.LinkedHashMap<>();
+            for(int i=0;i<quotes.length();i++){
+                JSONObject q=row(quotes,i);
+                String product=val(q,"product").trim();
+                if(product.isEmpty())continue;
+                String key=product+"\u0001"+val(q,"brand")+"\u0001"+val(q,"comparison_unit");
+                if(!groups.containsKey(key))groups.put(key,new java.util.ArrayList<>());
+                groups.get(key).add(q);
+            }
+            TextView count=label(groups.size()+" produto(s) encontrado(s)",12,MUTED,true);
+            target.addView(count);gap(target,7);
+            for(java.util.ArrayList<JSONObject> group:groups.values()){
+                if(group.isEmpty())continue;
+                group.sort((a,b)->Double.compare(a.optDouble("comparison_price",Double.MAX_VALUE),
+                                                 b.optDouble("comparison_price",Double.MAX_VALUE)));
+                JSONObject best=group.get(0);
+                LinearLayout panel=card(target);
+                text(panel,val(best,"product").toUpperCase(new java.util.Locale("pt","BR")),17,NAVY,true);
+                String brand=val(best,"brand");
+                if(!brand.isEmpty())text(panel,"Marca: "+brand,12,MUTED,false);
+                gap(panel,5);
+                String comparisonUnit=val(best,"comparison_unit");
+                String minPrice=ncListMoney(ncListAmount(best,"comparison_price",java.math.BigDecimal.ZERO));
+                text(panel,"Menor preço: "+minPrice+" / "+comparisonUnit,15,Color.rgb(19,121,91),true);
+                gap(panel,9);
+                for(int n=0;n<group.size();n++){
+                    JSONObject quote=group.get(n);
+                    String merchant=val(quote,"merchant").trim();
+                    if(merchant.isEmpty())continue;
+                    LinearLayout line=horizontal();line.setPadding(dp(6),dp(8),dp(6),dp(8));
+                    LinearLayout left=vertical();
+                    text(left,merchant,13,NAVY,true);
+                    String date=ncFromIso(val(quote,"observed_on"),false);
+                    text(left,val(quote,"package_value")+" "+val(quote,"package_unit")+
+                          " por embalagem • "+date,11,MUTED,false);
+                    line.addView(left,new LinearLayout.LayoutParams(0,-2,1.3f));
+                    LinearLayout right=vertical();right.setGravity(Gravity.END);
+                    text(right,ncListMoney(ncListAmount(quote,"unit_price",java.math.BigDecimal.ZERO)),14,NAVY,true);
+                    text(right,ncListMoney(ncListAmount(quote,"comparison_price",java.math.BigDecimal.ZERO))+
+                         "/"+comparisonUnit,11,MUTED,false);
+                    line.addView(right,new LinearLayout.LayoutParams(0,-2,1f));
+                    panel.addView(line);
+                    if(n==0)text(panel,"✓ Menor preço informado",11,Color.rgb(18,128,98),true);
+                }
+                gap(target,9);
+            }
+            text(target,"Preços informados por usuários. Confirme o valor com o estabelecimento antes de comprar.",11,MUTED,false);
+        });
+    }
