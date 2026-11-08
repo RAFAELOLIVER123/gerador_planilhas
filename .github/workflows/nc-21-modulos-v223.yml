@@ -171,6 +171,20 @@ jobs:
           assert 'dateButton.setText("📅 "+ncDateBR(date[0]))' in x
           print('Validado: conversão UI, formulários, agenda e datas internas ISO preservadas')
           PY
+      - name: Inspecionar rotas nativas sem publicar dados de usuários
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s=Path("android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java").read_text().splitlines()
+          pats=['void navigate(', 'void appScreen(', 'void loadPage(', 'void shopping(', 'void finance(', 'void ncOpenPortal(', 'void root(', 'JSONObject withHid(', 'JSONObject data(', 'newListItem(']
+          for term in pats:
+              found=[i for i,x in enumerate(s) if term in x]
+              for i in found[:2]:
+                  print("=== ",term," line",i+1," ===")
+                  print("\n".join(f"{j+1}: "+s[j][:220] for j in range(max(0,i-1),min(len(s),i+36))))
+          PY
       - name: Incluir comparador e financeiro sem remover app nativo
         shell: bash
         run: |
