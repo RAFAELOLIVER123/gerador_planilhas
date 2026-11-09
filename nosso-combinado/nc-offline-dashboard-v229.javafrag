@@ -1,0 +1,237 @@
+
+    // Nosso Combinado 2.1.19 — filtros, dashboard, consultas offline (sem baixas locais).
+    private String nfOwner="all";
+    private JSONObject nfMatrixSnapshot=new JSONObject();
+    private JSONObject nfPeopleSnapshot=new JSONObject();
+    private boolean nfOfflineView=false;
+    private static final String NF_MATRIX_KEY="nc_finance_matrix_24_v229";
+    private static final String NF_LEDGER_KEY="nc_finance_transactions_v229";
+    private static final String NF_LISTS_KEY="nc_finance_lists_v229";
+    private static final String NF_PEOPLE_KEY="nc_finance_people_v229";
+
+    private String nfMonthAdd(String ym,int delta){
+        try{
+            java.text.SimpleDateFormat fmt=new java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US);
+            fmt.setLenient(false);
+            java.util.Calendar c=java.util.Calendar.getInstance();
+            c.setTime(fmt.parse(ym+"-01"));c.add(java.util.Calendar.MONTH,delta);
+            return new java.text.SimpleDateFormat("yyyy-MM",java.util.Locale.US).format(c.getTime());
+        }catch(Exception e){return nfMonth;}
+    }
+    private String nfOwnerKey(JSONObject row){
+        long id=row.optLong("subject_user_id",0);
+        if(id>0)return "u:"+id;
+        String name=val(row,"subject_name").trim();
+        if(name.isEmpty()||name.equalsIgnoreCase("família / geral")||
+           name.equalsIgnoreCase("família")||name.equalsIgnoreCase("geral"))return "family";
+        return "old:"+name.toLowerCase(new java.util.Locale("pt","BR"));
+    }
+    private boolean nfMatches(JSONObject row){return "all".equals(nfOwner)||nfOwner.equals(nfOwnerKey(row));}
+    private String nfOwnerName(){
+        if("all".equals(nfOwner))return "Todos os responsáveis";
+        if("family".equals(nfOwner))return "Família / geral";
+        JSONArray people=array(nfPeopleSnapshot,"items");
+        for(int i=0;i<people.length();i++){
+            JSONObject p=row(people,i);
+            long id=p.optLong("user_id",p.optLong("id",0));
+            if(nfOwner.equals("u:"+id))return val(p,"name");
+        }
+        JSONArray members=array(nfMatrixSnapshot,"rows");
+        for(int i=0;i<members.length();i++){
+            JSONObject p=row(members,i);
+            if(nfMatches(p))return val(p,"subject_name").isEmpty()?"Responsável":val(p,"subject_name");
+        }
+        JSONArray transactions=array(nfLedger,"items");
+        for(int i=0;i<transactions.length();i++){
+            JSONObject p=row(transactions,i);
+            if(nfMatches(p))return val(p,"subject_name");
+        }
+        return "Responsável";
+    }
+    private void nfOwnerPicker(boolean matrix){
+        if(connected){
+            api.get("members",withHid(new JSONObject()),(data,error)->{
+                if(error==null&&data!=null){
+                    nfPeopleSnapshot=data;
+                    try{offline.save(userId,householdId,NF_PEOPLE_KEY,data.toString());}
+                    catch(Exception ignored){}
+                }else nfReadPeopleCache();
+                nfShowOwnerPicker(matrix);
+            });
+        }else{nfReadPeopleCache();nfShowOwnerPicker(matrix);}
+    }
+    private void nfReadPeopleCache(){
+        try{String raw=offline.load(userId,householdId,NF_PEOPLE_KEY);
+            if(raw!=null&&!raw.isEmpty())nfPeopleSnapshot=new JSONObject(raw);
+        }catch(Exception ignored){}
+    }
+    private void nfShowOwnerPicker(boolean matrix){
+        java.util.LinkedHashMap<String,String> options=new java.util.LinkedHashMap<>();
+        options.put("all","Todos");options.put("family","Família / geral");
+        JSONArray people=array(nfPeopleSnapshot,"items");
+        for(int i=0;i<people.length();i++){
+            JSONObject person=row(people,i);
+            long id=person.optLong("user_id",person.optLong("id",0));
+            String name=val(person,"name").trim();
+            if(id>0&&!name.isEmpty())options.put("u:"+id,name);
+        }
+        JSONArray from=matrix?array(nfMatrixSnapshot,"rows"):array(nfLedger,"items");
+        for(int i=0;i<from.length();i++){
+            JSONObject item=row(from,i);
+            String key=nfOwnerKey(item);
+            if(!"family".equals(key)&&!options.containsKey(key)){
+                String name=val(item,"subject_name").trim();
+                if(!name.isEmpty())options.put(key,name);
+            }
+        }
+        String[] labels=options.values().toArray(new String[0]);
+        String[] keys=options.keySet().toArray(new String[0]);
+        int chosen=0;
+        for(int i=0;i<keys.length;i++)if(keys[i].equals(nfOwner)){chosen=i;break;}
+        new android.app.AlertDialog.Builder(this).setTitle("Filtrar por responsável")
+            .setSingleChoiceItems(labels,chosen,(dialog,index)->{
+                nfOwner=keys[index];dialog.dismiss();
+                if(matrix)nfRenderMatrix(nfMatrixSnapshot);
+                else nfFinanceView(nfLedger);
+            })
+            .setNegativeButton("Cancelar",null).show();
+    }
+    private boolean nfMatrixHasMonth(JSONObject snapshot,String month){
+        String start=val(snapshot,"nc_cache_start");
+        if(start.length()!=7)return false;
+        int months=snapshot.optInt("nc_cache_months",0);
+        return months>0&&month.compareTo(start)>=0&&month.compareTo(nfMonthAdd(start,months-1))<=0;
+    }
+    private void nfSaveOffline(String key,JSONObject snapshot){
+        if(snapshot==null||householdId==null||householdId.isEmpty())return;
+        try{offline.save(userId,householdId,key,snapshot.toString());}
+        catch(Exception ignored){}
+    }
+    private JSONObject nfRestoreOffline(String key){
+        try{
+            String value=offline.load(userId,householdId,key);
+            if(value!=null&&!value.isEmpty())return new JSONObject(value);
+        }catch(Exception ignored){}
+        return null;
+    }
+    private void nfSyncOffline(){
+        if(!connected){msg("Sem internet. Você já pode consultar os dados que tiver baixado.");return;}
+        final int[] outstanding={3};
+        final int[] saved={0};
+        final String[] failures={""};
+        final String start=nfMonthAdd(nfMonth,-11);
+        text(content,"Sincronizando Financeiro, Planejamento e listas para consulta offline...",12,MUTED,false);
+        java.util.function.BiConsumer<Boolean,String> done=(success,name)->{
+            if(success)saved[0]++;
+            else failures[0]+=name+"; ";
+            outstanding[0]--;
+            if(outstanding[0]==0){
+                if(saved[0]==3)msg("✓ Financeiro, Planejamento (24 meses) e listas salvos neste aparelho.");
+                else msg("Dados salvos: "+saved[0]+"/3. Não foi possível baixar: "+failures[0]);
+            }
+        };
+        api.get("finance_matrix",withHid(data("start",start,"months","24")),(value,error)->{
+            if(error==null&&value!=null){
+                try{value.put("nc_cache_start",start);value.put("nc_cache_months",24);}catch(Exception ignored){}
+                nfMatrixSnapshot=value;
+                nfSaveOffline(NF_MATRIX_KEY,value);
+                done.accept(true,"");
+            }else done.accept(false,"Planejamento");
+        });
+        api.get("transactions",withHid(new JSONObject()),(value,error)->{
+            if(error==null&&value!=null){
+                nfLedger=value;nfSaveOffline(NF_LEDGER_KEY,value);
+                done.accept(true,"");
+            }else done.accept(false,"Financeiro");
+        });
+        api.get("lists",withHid(new JSONObject()),(value,error)->{
+            if(error==null&&value!=null){
+                nfSaveOffline(NF_LISTS_KEY,value);
+                done.accept(true,"");
+            }else done.accept(false,"Listas");
+        });
+    }
+
+    private void nfProgressBar(LinearLayout target,String title,
+               java.math.BigDecimal done,java.math.BigDecimal total,int tint){
+        double d=Math.max(0,done.doubleValue()),p=Math.max(0,total.doubleValue());
+        int percentage=p<=0?0:(int)Math.max(0,Math.min(100,Math.round(100*d/p)));
+        LinearLayout head=horizontal();head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name=label(title,12,NAVY,false);
+        head.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+        head.addView(label(percentage+"%",12,NAVY,true));
+        target.addView(head);gap(target,4);
+        LinearLayout track=horizontal();track.setBackground(shape(Color.rgb(234,239,246),7));
+        View filled=new View(this);filled.setBackground(shape(tint,7));
+        track.addView(filled,new LinearLayout.LayoutParams(0,dp(9),Math.max(0.01f,(float)percentage)));
+        if(percentage<100)track.addView(new View(this),
+            new LinearLayout.LayoutParams(0,dp(9),(float)(100-percentage)));
+        target.addView(track);gap(target,10);
+    }
+    private void nfDashboardSummary(java.math.BigDecimal plannedIn,java.math.BigDecimal received,
+            java.math.BigDecimal plannedOut,java.math.BigDecimal paid,String heading){
+        LinearLayout panel=card(content);
+        text(panel,"▦ "+heading,15,NAVY,true);
+        text(panel,nfOwnerName()+" · "+nfMonthTitle(),11,MUTED,false);
+        gap(panel,10);
+        nfProgressBar(panel,"Receitas recebidas · "+nfMoney(received)+" de "+nfMoney(plannedIn),
+            received,plannedIn,Color.rgb(36,148,108));
+        nfProgressBar(panel,"Despesas pagas · "+nfMoney(paid)+" de "+nfMoney(plannedOut),
+            paid,plannedOut,Color.rgb(213,111,98));
+        text(panel,"Saldo previsto: "+nfMoney(plannedIn.subtract(plannedOut)),14,NAVY,true);
+        text(panel,"Saldo realizado: "+nfMoney(received.subtract(paid)),13,
+           received.compareTo(paid)>=0?Color.rgb(20,121,91):Color.rgb(190,70,61),true);
+    }
+    private void nfMonthChart(JSONObject data){
+        JSONArray rows=array(data,"rows"),cells=array(data,"cells");
+        java.util.HashMap<Long,JSONObject> byId=new java.util.HashMap<>();
+        for(int i=0;i<rows.length();i++){
+            JSONObject r=row(rows,i);
+            if(nfMatches(r))byId.put(r.optLong("id",0),r);
+        }
+        java.math.BigDecimal[] income=new java.math.BigDecimal[5],expense=new java.math.BigDecimal[5];
+        for(int i=0;i<5;i++){income[i]=nfMoney0();expense[i]=nfMoney0();}
+        for(int i=0;i<cells.length();i++){
+            JSONObject c=row(cells,i);
+            JSONObject r=byId.get(c.optLong("row_id",0));
+            if(r==null)continue;
+            String month=val(c,"month");
+            if(month.length()<7)continue;
+            for(int j=0;j<5;j++){
+                if(!nfMonthAdd(nfMonth,j).equals(month.substring(0,7)))continue;
+                if("income".equals(val(r,"direction")))income[j]=income[j].add(nfAmount(c,"amount"));
+                else expense[j]=expense[j].add(nfAmount(c,"amount"));
+                break;
+            }
+        }
+        double max=1;
+        for(int i=0;i<5;i++)max=Math.max(max,Math.max(income[i].doubleValue(),expense[i].doubleValue()));
+        LinearLayout panel=card(content);
+        text(panel,"▥ Visão dos próximos cinco meses",15,NAVY,true);gap(panel,9);
+        for(int i=0;i<5;i++){
+            String month=nfMonthAdd(nfMonth,i);
+            LinearLayout line=horizontal();line.setGravity(Gravity.CENTER_VERTICAL);
+            String shortMonth=month.substring(5)+"/"+month.substring(2,4);
+            TextView name=label(shortMonth,11,MUTED,true);
+            line.addView(name,new LinearLayout.LayoutParams(dp(50),dp(28)));
+            LinearLayout bars=vertical();bars.setPadding(0,dp(3),0,dp(3));
+            LinearLayout inc=horizontal();inc.setBackground(shape(Color.rgb(236,242,247),5));
+            View barIn=new View(this);barIn.setBackground(shape(Color.rgb(47,160,120),5));
+            inc.addView(barIn,new LinearLayout.LayoutParams(0,dp(7),
+                    Math.max(.1f,(float)(income[i].doubleValue()/max*100))));
+            inc.addView(new View(this),new LinearLayout.LayoutParams(0,dp(7),
+                    Math.max(.1f,100f-(float)(income[i].doubleValue()/max*100))));
+            bars.addView(inc);
+            gap(bars,3);
+            LinearLayout exp=horizontal();exp.setBackground(shape(Color.rgb(236,242,247),5));
+            View barOut=new View(this);barOut.setBackground(shape(Color.rgb(218,123,108),5));
+            exp.addView(barOut,new LinearLayout.LayoutParams(0,dp(7),
+                    Math.max(.1f,(float)(expense[i].doubleValue()/max*100))));
+            exp.addView(new View(this),new LinearLayout.LayoutParams(0,dp(7),
+                    Math.max(.1f,100f-(float)(expense[i].doubleValue()/max*100))));
+            bars.addView(exp);
+            line.addView(bars,new LinearLayout.LayoutParams(0,dp(37),1));
+            panel.addView(line);
+        }
+        text(panel,"● Verde: entradas previstas   ● Coral: saídas previstas",11,MUTED,false);
+    }
