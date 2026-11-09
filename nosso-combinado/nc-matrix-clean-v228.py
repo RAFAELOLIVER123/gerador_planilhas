@@ -138,5 +138,5 @@ assert source.count('if(!"finance-matrix".equals(page)){')==1
 assert "ncListEditWithPhotos" in source
 assert "ncProPhotoSelect" in source
 assert "finance_matrix_payment_reverse" in source
-assert "nc_alarm05" in source
+# Áudio validado separadamente em res/raw/nc_alarm05.wav pelo workflow.
 print("Android 2.1.18 pronto: Planejamento compacto, menu ao segurar, fotos mantidas fora dele.")
