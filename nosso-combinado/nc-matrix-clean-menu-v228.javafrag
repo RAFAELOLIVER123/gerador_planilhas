@@ -1,0 +1,55 @@
+
+    /** Ações discretas ao segurar um lançamento do Planejamento mensal. */
+    private void nfMatrixRowMenu(JSONObject entry,JSONObject cell){
+        long rowId=entry.optLong("id",0);
+        boolean sourceList=rowId<0 || entry.optLong("source_item_id",0)>0 ||
+            entry.optLong("source_list_id",0)>0 ||
+            (cell!=null && (cell.optInt("source_list",0)!=0 ||
+                            cell.optLong("source_list_id",0)>0));
+        java.util.ArrayList<String> options=new java.util.ArrayList<>();
+        java.util.ArrayList<Runnable> actions=new java.util.ArrayList<>();
+        if(sourceList){
+            options.add("🛒 Abrir lista de origem");
+            actions.add(()->navigate("shopping"));
+        }else if(rowId>0){
+            options.add("✎ Editar conta ou receita e parcelas");
+            actions.add(()->ncProForm(entry));
+            options.add(cell==null?"＋ Planejar valor deste mês":"▦ Editar valor e vencimento do mês");
+            actions.add(()->nfEditCell(entry,cell));
+            if(cell!=null){
+                long tid=cell.optLong("transaction_id",0);
+                java.math.BigDecimal amount=nfAmount(cell,"amount");
+                java.math.BigDecimal paid=nfAmount(cell,"paid_amount");
+                java.math.BigDecimal pending=amount.subtract(paid).max(java.math.BigDecimal.ZERO);
+                if(tid>0&&pending.signum()>0){
+                    options.add("income".equals(val(entry,"direction"))?
+                        "↗ Registrar recebimento":"✓ Registrar pagamento");
+                    actions.add(()->{
+                        JSONObject tx=new JSONObject();
+                        try{
+                            tx.put("transaction_id",tid);
+                            tx.put("title",val(entry,"title"));
+                            tx.put("amount",amount);
+                            tx.put("paid_amount",paid);
+                            tx.put("direction",val(entry,"direction"));
+                        }catch(Exception ignored){}
+                        nfPaymentDialog(tx,true);
+                    });
+                }
+                if(tid>0){
+                    options.add("↶ Histórico e estornos");
+                    actions.add(()->nfHistory(tid,true));
+                }
+            }
+        }
+        if(options.isEmpty()){
+            msg("Este lançamento não possui ações disponíveis.");return;
+        }
+        new android.app.AlertDialog.Builder(this)
+            .setTitle(val(entry,"title"))
+            .setItems(options.toArray(new String[0]),(dialog,which)->{
+                if(which>=0&&which<actions.size())actions.get(which).run();
+            })
+            .setNegativeButton("Cancelar",null)
+            .show();
+    }
