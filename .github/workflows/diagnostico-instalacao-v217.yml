@@ -32,6 +32,11 @@ jobs:
             --pattern 'Nosso-Combinado-Nativo-2.1.17-Fotos-Itens.apk' \
             --dir "$RUNNER_TEMP/apk"
           cp "$RUNNER_TEMP/apk/Nosso-Combinado-Nativo-2.1.17-Fotos-Itens.apk" "$RUNNER_TEMP/app.apk"
+          gh release download nc-android-nativo-2.1.16 \
+            --repo "RAFAELOLIVER123/gerador_planilhas" \
+            --pattern 'Nosso-Combinado-Nativo-2.1.16-Contas-Receitas.apk' \
+            --dir "$RUNNER_TEMP/apk"
+          cp "$RUNNER_TEMP/apk/Nosso-Combinado-Nativo-2.1.16-Contas-Receitas.apk" "$RUNNER_TEMP/app-old.apk"
           test "$(stat -c%s "$RUNNER_TEMP/app.apk")" -gt 1000000
           sha256sum "$RUNNER_TEMP/app.apk"
           ls -lh "$RUNNER_TEMP/app.apk"
@@ -52,6 +57,9 @@ jobs:
           script: |
             adb wait-for-device
             adb shell getprop ro.build.version.release
+            echo "INSTALANDO VERSAO ANTERIOR 2.1.16"
+            adb install --no-incremental -r "$RUNNER_TEMP/app-old.apk"
+            echo "INSTALANDO 2.1.17 AO LADO DA 2.1.16"
             adb install --no-incremental -r "$RUNNER_TEMP/app.apk"
             adb shell pm path com.nossocombinado.app.mobile227
             adb shell am start -n com.nossocombinado.app.mobile227/com.nossocombinado.app.MainActivity
