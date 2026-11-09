@@ -1,4 +1,4 @@
-name: Nosso Combinado Nativo 2.1.19 - Dashboard Offline
+name: Nosso Combinado Nativo 2.1.19 - Dashboard Offline (Revisado)
 on:
   push:
     branches: [nosso-combinado-21-dashboard-offline-v229]
