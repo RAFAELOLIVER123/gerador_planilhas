@@ -1,0 +1,230 @@
+
+    // NC 2.1.16 — Nova conta ou receita, com classificação independente e programação.
+    private static final String[][] NCP_INCOME = {
+        {"salary","Salário"},{"bonus","Bônus"},{"award","Premiação"},{"commission","Comissão"},
+        {"vr","Vale-refeição"},{"va","Vale-alimentação"},{"allowance","Vales e auxílios"},
+        {"freelance","Renda extra"},{"sale","Vendas"},{"refund","Reembolso"},
+        {"benefit","Benefícios"},{"investment_income","Rendimentos"},
+        {"other_income","Outras entradas"},{"__custom","＋ Criar categoria personalizada"}
+    };
+    private static final String[][] NCP_EXPENSE = {
+        {"market","Supermercado"},{"pharmacy","Farmácia"},{"school","Escola"},
+        {"home","Casa"},{"transport","Transporte"},{"health","Saúde"},
+        {"education","Educação"},{"utilities","Contas fixas"},
+        {"subscriptions","Assinaturas"},{"leisure","Lazer"},
+        {"debt","Dívidas e parcelas"},{"taxes","Taxas e impostos"},
+        {"pet","Pets"},{"childcare","Cuidados da família"},
+        {"investment","Investimentos"},{"other","Outros"},
+        {"__custom","＋ Criar categoria personalizada"}
+    };
+    private static final String[] NCP_KIND_CODES={"regular","credit_card","liability","asset"};
+    private static final String[] NCP_KIND_LABELS={
+        "Conta / receita comum","💳 Cartão de crédito e fatura",
+        "Passivo / dívida a pagar","Ativo / bem / aplicação"
+    };
+    private static class NcProInstallment {
+        java.math.BigDecimal amount;
+        NcProInstallment(java.math.BigDecimal amount){this.amount=amount;}
+    }
+    private java.util.ArrayList<java.math.BigDecimal> ncProSchedule(String mode,String variable,String totalRaw,String fixedRaw,String single) {
+        java.util.ArrayList<java.math.BigDecimal> result=new java.util.ArrayList<>();
+        if("single".equals(mode)) {
+            java.math.BigDecimal one=ncListDecimal(single,null);
+            if(one==null||one.signum()<=0)throw new IllegalArgumentException("Informe um valor maior que zero.");
+            result.add(one.setScale(2,java.math.RoundingMode.HALF_UP));
+        } else if("different".equals(mode)){
+            String src=variable==null?"":variable.trim();
+            if(src.isEmpty())throw new IllegalArgumentException("Informe as parcelas. Exemplo: 4x500; 1x400.");
+            String[] groups=src.split("[;\\n]+");
+            for(String group:groups){
+                String g=group.trim();
+                if(g.isEmpty())continue;
+                java.util.regex.Matcher matcher=java.util.regex.Pattern.compile("(?i)^(\\d{1,3})\\s*[x×]\\s*(?:R\\$\\s*)?([\\d.,]+)$").matcher(g);
+                int n;String raw;
+                if(matcher.matches()){
+                    n=Integer.parseInt(matcher.group(1));raw=matcher.group(2);
+                }else if(g.matches("(?i)^(?:R\\$\\s*)?[\\d.,]+$")){
+                    n=1;raw=g;
+                }else throw new IllegalArgumentException("Formato inválido: "+g+". Use 4x500; 1x400.");
+                java.math.BigDecimal amount=ncListDecimal(raw,null);
+                if(n<1||n>120||amount==null||amount.signum()<=0)
+                    throw new IllegalArgumentException("Confira a quantidade e o valor de cada parcela.");
+                if(amount.scale()>2)throw new IllegalArgumentException("Use no máximo duas casas decimais.");
+                for(int i=0;i<n;i++){
+                    if(result.size()>=120)throw new IllegalArgumentException("A programação permite até 120 meses.");
+                    result.add(amount.setScale(2,java.math.RoundingMode.HALF_UP));
+                }
+            }
+        }else if("fixed".equals(mode)){
+            java.math.BigDecimal total=ncListDecimal(totalRaw,null),fixed=ncListDecimal(fixedRaw,null);
+            if(total==null||fixed==null||total.signum()<=0||fixed.signum()<=0)
+                throw new IllegalArgumentException("Informe valor total e parcela fixa positivos.");
+            if(total.scale()>2||fixed.scale()>2)
+                throw new IllegalArgumentException("Use até duas casas decimais.");
+            total=total.setScale(2,java.math.RoundingMode.HALF_UP);
+            fixed=fixed.setScale(2,java.math.RoundingMode.HALF_UP);
+            while(total.signum()>0){
+                if(result.size()>=120)throw new IllegalArgumentException("A programação ultrapassa 120 meses.");
+                java.math.BigDecimal p=total.min(fixed);
+                result.add(p);total=total.subtract(p);
+            }
+        }else throw new IllegalArgumentException("Selecione uma forma de programação.");
+        if(result.isEmpty())throw new IllegalArgumentException("Informe pelo menos uma parcela.");
+        java.math.BigDecimal total=java.math.BigDecimal.ZERO;
+        for(java.math.BigDecimal amount:result){
+            if(amount.compareTo(new java.math.BigDecimal("100000000"))>0)
+                throw new IllegalArgumentException("Uma parcela excede o limite permitido.");
+            total=total.add(amount);
+        }
+        if(total.compareTo(new java.math.BigDecimal("100000000"))>0)
+            throw new IllegalArgumentException("O total não pode ultrapassar R$ 100 milhões.");
+        return result;
+    }
+    private String ncProMonthToISO(String display){
+        String s=display==null?"":display.trim();
+        if(s.matches("(0[1-9]|1[0-2])/20\\d\\d"))return s.substring(3,7)+"-"+s.substring(0,2);
+        if(s.matches("20\\d\\d-(0[1-9]|1[0-2])"))return s;
+        return null;
+    }
+    private String ncProMonthLabel(String iso){
+        if(iso!=null&&iso.matches("20\\d\\d-(0[1-9]|1[0-2])"))return iso.substring(5,7)+"/"+iso.substring(0,4);
+        return "";
+    }
+    private EditText ncProMonthPicker(LinearLayout parent,String chosen){
+        EditText input=ncFormInput(parent,"Começar em","Mês / ano",ncProMonthLabel(chosen),false);
+        input.setFocusable(false);input.setClickable(true);
+        input.setCompoundDrawablesWithIntrinsicBounds(0,0,android.R.drawable.ic_menu_my_calendar,0);
+        input.setOnClickListener(v->{
+            java.util.Calendar cal=java.util.Calendar.getInstance();
+            try{
+                cal.setTime(new java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US)
+                  .parse((ncProMonthToISO(ncValue(input))==null?nfMonth:ncProMonthToISO(ncValue(input)))+"-01"));
+            }catch(Exception ignored){}
+            new android.app.DatePickerDialog(this,(picker,y,m,d)->
+                input.setText(String.format(java.util.Locale.US,"%02d/%04d",m+1,y)),
+                cal.get(java.util.Calendar.YEAR),cal.get(java.util.Calendar.MONTH),1).show();
+        });
+        return input;
+    }
+    private void ncProSection(LinearLayout parent,String icon,String heading,String help){
+        LinearLayout title=horizontal();title.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView glyph=label(icon,20,NAVY,false);glyph.setGravity(android.view.Gravity.CENTER);
+        glyph.setBackground(shape(Color.rgb(230,238,251),14));
+        title.addView(glyph,new LinearLayout.LayoutParams(dp(43),dp(43)));
+        LinearLayout labels=vertical();
+        text(labels,heading,16,NAVY,true);
+        if(help!=null&&!help.isEmpty())text(labels,help,11,MUTED,false);
+        LinearLayout.LayoutParams l=new LinearLayout.LayoutParams(0,-2,1);l.leftMargin=dp(11);
+        title.addView(labels,l);
+        LinearLayout.LayoutParams gap=new LinearLayout.LayoutParams(-1,-2);
+        gap.topMargin=dp(17);parent.addView(title,gap);
+    }
+    private void ncProSpinnerSet(android.widget.Spinner spinner,String[][] options){
+        java.util.ArrayList<String> names=new java.util.ArrayList<>();
+        for(String[] option:options)names.add(option[1]);
+        android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<>(
+            this,android.R.layout.simple_spinner_item,names);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+    }
+    private void ncProLoadMembers(android.widget.Spinner list,
+            java.util.ArrayList<Long> memberIds,java.util.ArrayList<String> names,long selected){
+        memberIds.clear();names.clear();
+        memberIds.add(0L);names.add("Família / geral");
+        android.widget.ArrayAdapter<String> loading=new android.widget.ArrayAdapter<>(
+            this,android.R.layout.simple_spinner_item,names);
+        loading.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        list.setAdapter(loading);
+        final String activeHousehold=householdId;
+        api.get("members",withHid(new JSONObject()),(json,error)->{
+            if(error!=null||!activeHousehold.equals(householdId))return;
+            java.util.LinkedHashSet<Long> unique=new java.util.LinkedHashSet<>();
+            JSONArray rows=array(json,"items");
+            for(int i=0;i<rows.length();i++){
+                JSONObject row=row(rows,i);
+                long id=row.optLong("user_id",row.optLong("id",0));
+                String name=val(row,"name").trim();
+                if(id<=0||name.isEmpty()||!unique.add(id))continue;
+                memberIds.add(id);names.add(name);
+            }
+            android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<>(
+                 MainActivity.this,android.R.layout.simple_spinner_item,names);
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            list.setAdapter(adapter);
+            for(int i=0;i<memberIds.size();i++)if(memberIds.get(i)==selected){list.setSelection(i);break;}
+        });
+    }
+    private void ncProShowPhoto(String key){
+        String raw=getSharedPreferences("nc_finance_photos",MODE_PRIVATE).getString(key,"[]");
+        JSONArray photos=new JSONArray();
+        try{photos=new JSONArray(raw);}catch(Exception ignored){}
+        if(photos.length()==0){msg("Ainda não há fotos nesta conta.");return;}
+        final JSONArray arr=photos;
+        String[] names=new String[arr.length()];
+        for(int i=0;i<arr.length();i++)names[i]="🖼 Foto "+(i+1)+" • Salva neste celular";
+        new android.app.AlertDialog.Builder(this).setTitle("Fotos da conta")
+          .setItems(names,(dialog,index)->{
+              String path=arr.optString(index,"");
+              if(path.isEmpty())return;
+              android.graphics.BitmapFactory.Options opts=new android.graphics.BitmapFactory.Options();
+              opts.inJustDecodeBounds=true;
+              android.graphics.BitmapFactory.decodeFile(path,opts);
+              opts.inSampleSize=Math.max(1,Math.max(opts.outWidth,opts.outHeight)/1000);
+              opts.inJustDecodeBounds=false;
+              android.graphics.Bitmap photo=android.graphics.BitmapFactory.decodeFile(path,opts);
+              if(photo==null){msg("Esta foto não está mais disponível.");return;}
+              android.widget.ImageView image=new android.widget.ImageView(this);
+              image.setImageBitmap(photo);image.setAdjustViewBounds(true);
+              image.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+              new android.app.AlertDialog.Builder(this).setTitle("Comprovante "+(index+1))
+                .setView(image).setNegativeButton("Voltar",null)
+                .setNeutralButton("Excluir",(d,w)->ncProDeletePhoto(key,index)).show();
+          }).setNegativeButton("Fechar",null).show();
+    }
+    private void ncProDeletePhoto(String key,int index){
+        try{
+            android.content.SharedPreferences prefs=getSharedPreferences("nc_finance_photos",MODE_PRIVATE);
+            JSONArray items=new JSONArray(prefs.getString(key,"[]"));
+            if(index<0||index>=items.length())return;
+            java.io.File f=new java.io.File(items.optString(index));
+            // Proteção: somente apagar arquivos dentro do diretório privado de recibos.
+            if(f.getCanonicalPath().startsWith(new java.io.File(getFilesDir(),"nc_finance_receipts").getCanonicalPath()+java.io.File.separator))
+                 f.delete();
+            JSONArray keep=new JSONArray();
+            for(int i=0;i<items.length();i++)if(i!=index)keep.put(items.optString(i));
+            prefs.edit().putString(key,keep.toString()).apply();
+            msg("Foto removida.");
+        }catch(Exception error){msg("Não foi possível remover a foto.");}
+    }
+    private void ncProPhotoSelect(String draft,String source){
+        android.content.Intent intent=new android.content.Intent(this,NcFinancePhotoActivity.class);
+        intent.putExtra("draft_id",draft);
+        intent.putExtra("source",source);
+        startActivity(intent);
+    }
+    private void ncProCommitPhotos(String draft,long rowId){
+        if(rowId<=0)return;
+        android.content.SharedPreferences prefs=getSharedPreferences("nc_finance_photos",MODE_PRIVATE);
+        String newFiles=prefs.getString(draft,"[]");
+        String rowKey="row_"+householdId+"_"+rowId;
+        try {
+            JSONArray joined=new JSONArray(prefs.getString(rowKey,"[]"));
+            JSONArray added=new JSONArray(newFiles);
+            for(int i=0;i<added.length();i++){
+                if(joined.length()>=6)break;
+                joined.put(added.optString(i));
+            }
+            prefs.edit().putString(rowKey,joined.toString()).remove(draft).apply();
+        }catch(Exception error){
+            prefs.edit().putString(rowKey,newFiles).remove(draft).apply();
+        }
+    }
+    private void ncProAttachButton(LinearLayout parent,long rowId){
+        if(rowId<=0)return;
+        String key="row_"+householdId+"_"+rowId;
+        String raw=getSharedPreferences("nc_finance_photos",MODE_PRIVATE).getString(key,"[]");
+        int count=0;try{count=new JSONArray(raw).length();}catch(Exception ignored){}
+        TextView button=button("🖼 Fotos neste celular ("+count+")",
+            Color.rgb(242,245,253),NAVY,()->ncProShowPhoto(key));
+        parent.addView(button,new LinearLayout.LayoutParams(-1,dp(42)));
+    }

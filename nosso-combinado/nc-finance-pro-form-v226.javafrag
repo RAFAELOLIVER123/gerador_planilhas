@@ -1,0 +1,339 @@
+
+    private void ncProForm(JSONObject existing){
+        if(!nfOnline())return;
+        long rowId=existing==null?0:existing.optLong("id",0);
+        if(rowId<0){msg("Este item vem de uma lista. Edite-o na lista original.");return;}
+        if(rowId<=0){ncProFormReady(null,null);return;}
+        api.get("finance_matrix_schedule_info",withHid(data("row_id",String.valueOf(rowId))),(details,error)->{
+            if(error!=null){msg("Não foi possível carregar a programação: "+error);return;}
+            ncProFormReady(existing,details);
+        });
+    }
+    private void ncProFormReady(JSONObject original,JSONObject info){
+        final boolean editing=original!=null&&original.optLong("id",0)>0;
+        final long rowId=editing?original.optLong("id",0):0;
+        final String houseAtOpen=householdId;
+        final String draft="d_"+java.util.UUID.randomUUID().toString().replace("-","");
+        final JSONArray cells=info==null?new JSONArray():array(info,"cells");
+        String beginning=nfMonth;
+        StringBuilder oldValues=new StringBuilder();
+        boolean locked=false;
+        java.math.BigDecimal totalOld=java.math.BigDecimal.ZERO;
+        for(int i=0;i<cells.length();i++){
+            JSONObject cell=row(cells,i);
+            String date=val(cell,"month");
+            if(i==0&&date.length()>=7)beginning=date.substring(0,7);
+            if(cell.optBoolean("locked",false))locked=true;
+            java.math.BigDecimal money=nfAmount(cell,"amount");
+            if(money.signum()>0){
+                if(oldValues.length()>0)oldValues.append("; ");
+                oldValues.append("1x").append(money.stripTrailingZeros().toPlainString());
+                totalOld=totalOld.add(money);
+            }
+        }
+        final boolean hasLockedCells=locked;
+        final android.app.Dialog dialog=new android.app.Dialog(this);
+        LinearLayout pageContent=vertical();
+        pageContent.setBackgroundColor(Color.rgb(246,248,252));
+
+        LinearLayout heading=horizontal();heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        heading.setPadding(dp(18),dp(12),dp(10),dp(12));
+        heading.setBackgroundColor(Color.WHITE);
+        LinearLayout headingText=vertical();
+        text(headingText,editing?"Editar conta ou receita":"Nova conta ou receita",22,NAVY,true);
+        text(headingText,"Planeje cada mês sem alterar o que já foi pago.",12,MUTED,false);
+        heading.addView(headingText,new LinearLayout.LayoutParams(0,-2,1));
+        TextView x=button("×",Color.rgb(241,244,248),NAVY,()->dialog.dismiss());
+        x.setContentDescription("Fechar formulário");
+        x.setTextSize(23);
+        heading.addView(x,new LinearLayout.LayoutParams(dp(42),dp(44)));
+        pageContent.addView(heading);
+
+        ScrollView scrollView=new ScrollView(this);
+        scrollView.setFillViewport(false);
+        LinearLayout form=vertical();form.setPadding(dp(17),dp(4),dp(17),dp(20));
+        scrollView.addView(form);
+        pageContent.addView(scrollView,new LinearLayout.LayoutParams(-1,0,1));
+
+        ncProSection(form,"🧾","Identificação","Conta, receita ou lançamento da família");
+        EditText title=ncFormInput(form,"Nome da conta ou receita *","Ex.: Energia, Salário, Aluguel",val(original,"title"),false);
+        title.setSingleLine(true);
+        ncProSection(form,"↕","Movimento e classificação","Uma compra de ativo também é uma saída no fluxo de caixa");
+        String oldDirection=val(original,"direction");
+        Spinner movement=ncChoice(form,"Movimentação",new String[]{"↘ Saída","↗ Entrada"},
+                                  "income".equals(oldDirection)?1:0);
+        if(editing&&cells.length()>0)movement.setEnabled(false);
+        int kindPosition=0;
+        String rawKind=val(original,"account_kind");
+        for(int i=0;i<NCP_KIND_CODES.length;i++)if(NCP_KIND_CODES[i].equals(rawKind))kindPosition=i;
+        Spinner kind=ncChoice(form,"Classificação",NCP_KIND_LABELS,kindPosition);
+        EditText cardName=ncFormInput(form,"Nome do cartão de crédito *","Ex.: Cartão da família",val(original,"card_name"),false);
+        cardName.setVisibility(kindPosition==1?View.VISIBLE:View.GONE);
+        kind.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            @Override public void onNothingSelected(android.widget.AdapterView<?> p){}
+            @Override public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){
+                cardName.setVisibility(pos==1?View.VISIBLE:View.GONE);
+            }
+        });
+
+        Spinner categoryChoice=ncChoice(form,"Categoria",
+           new String[]{"Selecione a categoria"},0);
+        EditText custom=ncFormInput(form,"Categoria personalizada *","Ex.: Mensalidade do curso","",false);
+        custom.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
+        custom.setVisibility(View.GONE);
+        final String[][][] categoryList=new String[1][][];
+        final boolean[] initialCategories={true};
+        final String initialCategory=val(original,"category");
+        final String initialLabel=val(original,"category_label");
+        Runnable refreshCategories=()->{
+            String[][] options=movement.getSelectedItemPosition()==1?NCP_INCOME:NCP_EXPENSE;
+            categoryList[0]=options;
+            ncProSpinnerSet(categoryChoice,options);
+            if(initialCategories[0]){
+                int selected=0;
+                for(int i=0;i<options.length;i++)if(options[i][0].equals(initialCategory)){selected=i;break;}
+                if(!initialCategory.isEmpty()&&!initialLabel.isEmpty()&&
+                     ("other".equals(initialCategory)||"other_income".equals(initialCategory))&&
+                     !"Outros".equals(initialLabel)&&!"Outras entradas".equals(initialLabel)){
+                    selected=options.length-1;
+                    custom.setText(initialLabel);
+                }
+                categoryChoice.setSelection(selected);
+                initialCategories[0]=false;
+            }
+        };
+        categoryChoice.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            public void onNothingSelected(android.widget.AdapterView<?> p){}
+            public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){
+                boolean isCustom=categoryList[0]!=null&&pos>=0&&pos<categoryList[0].length
+                              &&"__custom".equals(categoryList[0][pos][0]);
+                custom.setVisibility(isCustom?View.VISIBLE:View.GONE);
+            }
+        });
+        movement.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            public void onNothingSelected(android.widget.AdapterView<?> p){}
+            public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){refreshCategories.run();}
+        });
+        refreshCategories.run();
+
+        ncProSection(form,"👤","Responsável ou origem","Associe a receita ou despesa a um integrante");
+        Spinner responsible=ncChoice(form,"Responsável / origem da receita",
+            new String[]{"Família / geral"},0);
+        final java.util.ArrayList<Long> memberIds=new java.util.ArrayList<>();
+        final java.util.ArrayList<String> members=new java.util.ArrayList<>();
+        ncProLoadMembers(responsible,memberIds,members,original==null?0:original.optLong("subject_user_id",0));
+        EditText sort=ncFormInput(form,"Ordem de exibição","1000",
+            editing?val(original,"sort_order"):"1000",false);
+        sort.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
+
+        ncProSection(form,"📅","Programação","Previsão não é pagamento: só baixas confirmadas alteram o saldo");
+        CheckBox installments=new CheckBox(this);
+        installments.setText("Criar parcelas mensais");
+        installments.setTextSize(15);installments.setTextColor(NAVY);
+        installments.setChecked(editing&&cells.length()>1);
+        form.addView(installments);
+        EditText single=ncFormInput(form,"Valor previsto (R$) *","Ex.: 500,00",
+            cells.length()==1?nfAmount(row(cells,0),"amount").toPlainString():"",false);
+        single.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|
+              android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        LinearLayout planOptions=vertical();
+        form.addView(planOptions);
+        Spinner mode=ncChoice(planOptions,"Como deseja programar?",
+             new String[]{"Valores diferentes por mês","Valor total + parcela fixa"},0);
+        EditText values=ncFormInput(planOptions,"Parcelas na ordem dos meses",
+            "4x500; 1x400",oldValues.toString(),true);
+        text(planOptions,"Exemplo: 4x500; 1x400 = 5 parcelas, total R$ 2.400,00.",12,MUTED,false);
+        EditText total=ncFormInput(planOptions,"Valor total (R$)","Ex.: 2400,00",
+            totalOld.signum()>0?totalOld.toPlainString():"",false);
+        total.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText fixed=ncFormInput(planOptions,"Valor fixo da parcela (R$)",
+            "Ex.: 500,00",oldValues.length()>0?nfAmount(row(cells,0),"amount").toPlainString():"",false);
+        fixed.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        TextView preview=label("Informe os valores para visualizar a programação.",13,NAVY,true);
+        preview.setPadding(dp(12),dp(12),dp(12),dp(12));
+        preview.setBackground(shape(Color.rgb(231,239,250),12));
+        LinearLayout.LayoutParams pm=new LinearLayout.LayoutParams(-1,-2);pm.topMargin=dp(13);
+        form.addView(preview,pm);
+        EditText start=ncProMonthPicker(form,beginning);
+        EditText due=ncFormInput(form,"Dia do vencimento","Ex.: 10",
+            cells.length()>0?val(row(cells,0),"due_day"):"10",false);
+        due.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        TextView reminder=label("Até 120 meses. Apenas um pagamento confirmado altera o saldo pago.",
+            12,Color.rgb(109,92,57),false);
+        reminder.setPadding(dp(10),dp(12),dp(10),dp(12));
+        form.addView(reminder);
+        Runnable displayMode=()->{
+            boolean has=installments.isChecked();
+            single.setVisibility(has?View.GONE:View.VISIBLE);
+            planOptions.setVisibility(has?View.VISIBLE:View.GONE);
+            boolean variable=mode.getSelectedItemPosition()==0;
+            values.setVisibility(has&&variable?View.VISIBLE:View.GONE);
+            total.setVisibility(has&&!variable?View.VISIBLE:View.GONE);
+            fixed.setVisibility(has&&!variable?View.VISIBLE:View.GONE);
+        };
+        Runnable previewAction=()->{
+            displayMode.run();
+            try{
+                String scheduleMode=!installments.isChecked()?"single":
+                       mode.getSelectedItemPosition()==0?"different":"fixed";
+                java.util.ArrayList<java.math.BigDecimal> series=ncProSchedule(scheduleMode,
+                  ncValue(values),ncValue(total),ncValue(fixed),ncValue(single));
+                java.math.BigDecimal sum=java.math.BigDecimal.ZERO;
+                for(java.math.BigDecimal amount:series)sum=sum.add(amount);
+                StringBuilder description=new StringBuilder();
+                description.append("✓ ").append(series.size()).append(" mês(es)")
+                  .append(" · Total ").append(ncListMoney(sum));
+                for(int i=0;i<Math.min(series.size(),4);i++){
+                    description.append("\n").append(i+1).append("ª parcela: ")
+                      .append(ncListMoney(series.get(i)));
+                }
+                if(series.size()>4)description.append("\n… e mais ").append(series.size()-4);
+                preview.setText(description.toString());
+            }catch(Exception invalid){
+                preview.setText("Informe as parcelas para visualizar a programação.\n"+invalid.getMessage());
+            }
+        };
+        android.text.TextWatcher update=new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            public void onTextChanged(CharSequence s,int start,int before,int count){previewAction.run();}
+            public void afterTextChanged(android.text.Editable text){}
+        };
+        for(EditText field:new EditText[]{values,total,fixed,single})field.addTextChangedListener(update);
+        installments.setOnCheckedChangeListener((v,b)->previewAction.run());
+        mode.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            public void onNothingSelected(android.widget.AdapterView<?> p){}
+            public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){previewAction.run();}
+        });
+        previewAction.run();
+
+        ncProSection(form,"📷","Fotos da conta","Galeria ou câmera · imagens salvas somente neste aparelho");
+        LinearLayout photos=horizontal();
+        TextView camera=button("📷 Tirar foto",Color.rgb(230,241,255),NAVY,
+          ()->ncProPhotoSelect(draft,"camera"));
+        TextView gallery=button("🖼 Galeria",Color.rgb(235,244,235),NAVY,
+          ()->ncProPhotoSelect(draft,"gallery"));
+        photos.addView(camera,new LinearLayout.LayoutParams(0,dp(46),1));
+        LinearLayout.LayoutParams g=new LinearLayout.LayoutParams(0,dp(46),1);g.leftMargin=dp(6);
+        photos.addView(gallery,g);form.addView(photos);
+        TextView review=button("Ver fotos selecionadas / remover",Color.rgb(245,247,250),NAVY,
+            ()->ncProShowPhoto(draft));
+        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,dp(42));
+        rp.topMargin=dp(8);form.addView(review,rp);
+        if(editing) {
+            String rowPhotos="row_"+houseAtOpen+"_"+rowId;
+            TextView existingPhotos=button("🗂 Ver fotos já salvas desta conta",
+              Color.rgb(245,247,250),NAVY,()->ncProShowPhoto(rowPhotos));
+            LinearLayout.LayoutParams oldParams=new LinearLayout.LayoutParams(-1,dp(42));
+            oldParams.topMargin=dp(6);
+            form.addView(existingPhotos,oldParams);
+        }
+        text(form,"Fotos ficam privadas no celular. A sincronização de comprovantes com outros membros ainda exige suporte do servidor.",11,MUTED,false);
+
+        LinearLayout footer=horizontal();footer.setPadding(dp(12),dp(9),dp(12),dp(12));
+        footer.setBackgroundColor(Color.WHITE);
+        TextView cancel=button("Cancelar",Color.rgb(241,243,247),NAVY,()->dialog.dismiss());
+        footer.addView(cancel,new LinearLayout.LayoutParams(0,dp(52),1));
+        TextView save=button(editing?"Salvar alterações":"Criar conta ou receita",PINK,WHITE,()->{});
+        LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,dp(52),1.9f);
+        bp.leftMargin=dp(8);footer.addView(save,bp);
+        pageContent.addView(footer);
+        final String operationId=java.util.UUID.randomUUID().toString();
+        save.setOnClickListener(v->{
+            if(!houseAtOpen.equals(householdId)){msg("A família mudou. Reabra o formulário.");return;}
+            String name=ncValue(title);
+            if(name.isEmpty()){title.setError("Informe o nome da conta ou receita.");return;}
+            if(name.length()>180){title.setError("Máximo 180 caracteres.");return;}
+            String direction=movement.getSelectedItemPosition()==1?"income":"expense";
+            String[][] options=categoryList[0];
+            int categoryIndex=categoryChoice.getSelectedItemPosition();
+            if(options==null||categoryIndex<0||categoryIndex>=options.length){
+                msg("Selecione uma categoria.");return;
+            }
+            String code=options[categoryIndex][0],label=options[categoryIndex][1];
+            if("__custom".equals(code)){
+                label=ncValue(custom);
+                if(label.isEmpty()){custom.setError("Informe sua categoria.");return;}
+                if(label.length()>80){custom.setError("Máximo 80 caracteres.");return;}
+                code="income".equals(direction)?"other_income":"other";
+            }
+            int kindIndex=kind.getSelectedItemPosition();
+            if(kindIndex<0||kindIndex>=NCP_KIND_CODES.length)return;
+            String card=ncValue(cardName);
+            if(kindIndex==1&&card.isEmpty()){cardName.setError("Informe o nome do cartão.");return;}
+            if(card.length()>80){cardName.setError("Máximo 80 caracteres.");return;}
+            int order;
+            try{order=Integer.parseInt(ncValue(sort));}catch(Exception bad){
+                sort.setError("Informe a ordem numérica.");return;
+            }
+            if(order< -100000||order>100000){sort.setError("Valor entre -100000 e 100000");return;}
+            String month=ncProMonthToISO(ncValue(start));
+            if(month==null){msg("Escolha o mês de início.");return;}
+            int dueDay;
+            try{dueDay=Integer.parseInt(ncValue(due));}
+            catch(Exception bad){due.setError("Escolha o dia de vencimento.");return;}
+            if(dueDay<1||dueDay>31){due.setError("Dia entre 1 e 31.");return;}
+            java.util.ArrayList<java.math.BigDecimal> installmentsList;
+            try{
+                installmentsList=ncProSchedule(!installments.isChecked()?"single":
+                  mode.getSelectedItemPosition()==0?"different":"fixed",
+                  ncValue(values),ncValue(total),ncValue(fixed),ncValue(single));
+            }catch(Exception bad){msg(bad.getMessage());return;}
+            if(hasLockedCells){msg("Esta conta tem competências importadas. Edite os valores no módulo original.");return;}
+            if(!nfOnline())return;
+            long assigned=0L;
+            int who=responsible.getSelectedItemPosition();
+            if(who>=0&&who<memberIds.size())assigned=memberIds.get(who);
+            JSONArray amounts=new JSONArray();
+            for(java.math.BigDecimal money:installmentsList)
+                amounts.put(money.setScale(2,java.math.RoundingMode.HALF_UP).toPlainString());
+            JSONObject payload=withHid(data(
+              "row_id",String.valueOf(rowId),
+              "title",name,"direction",direction,"category",code,
+              "account_kind",NCP_KIND_CODES[kindIndex],"category_label",label,
+              "card_name",kindIndex==1?card:"",
+              "subject_user_id",String.valueOf(assigned),"sort_order",String.valueOf(order),
+              "start_month",month,"due_day",String.valueOf(dueDay),
+              "client_op_id",operationId));
+            try{payload.put("values",amounts);}catch(Exception ignored){}
+            save.setEnabled(false);
+            final String finalCategory=code,finalLabel=label,finalCard=card;
+            final long finalAssigned=assigned;
+            Runnable complete=()->{
+                if(!houseAtOpen.equals(householdId)){save.setEnabled(true);return;}
+                api.post("finance_matrix_schedule_save",payload,(response,error)->{
+                    save.setEnabled(true);
+                    if(error!=null){
+                        msg("Programação não salva: "+error+
+                            (editing?" Os dados cadastrais podem já ter sido alterados.":""));
+                        return;
+                    }
+                    long id=response.optLong("id",rowId);
+                    if(id>0)ncProCommitPhotos(draft,id);
+                    dialog.dismiss();
+                    msg("Conta ou receita programada: "+installmentsList.size()+" competência(s)."+
+                        " Nenhum pagamento foi marcado automaticamente.");
+                    if(page.equals("finance-matrix"))nfLoadMatrix();
+                    else if(page.equals("finance"))loadPage(false);
+                });
+            };
+            if(editing){
+                JSONObject update=withHid(data("id",String.valueOf(rowId),
+                    "title",name,"direction",direction,"category",finalCategory,
+                    "account_kind",NCP_KIND_CODES[kindIndex],"category_label",finalLabel,
+                    "card_name",kindIndex==1?finalCard:"",
+                    "subject_user_id",String.valueOf(finalAssigned),"sort_order",String.valueOf(order)));
+                api.post("finance_matrix_row_save",update,(saved,error)->{
+                    if(error!=null){save.setEnabled(true);msg("Dados não salvos: "+error);return;}
+                    complete.run();
+                });
+            }else complete.run();
+        });
+        dialog.setContentView(pageContent);
+        dialog.show();
+        android.view.Window win=dialog.getWindow();
+        if(win!=null){
+            win.setBackgroundDrawableResource(android.R.color.transparent);
+            win.setLayout(-1,-1);
+            win.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+    }
