@@ -283,7 +283,7 @@ jobs:
           print("PASS: planejamento compacto, ações no menu, sem imagens, financeiro e listas preservados")
           PY
           test -s android-v1/app/src/main/res/raw/nc_alarm05.wav
-      - name: Integrar dashboard, filtro de membros e sincronização offline 2.1.19
+      - name: Integrar filtro de membros e consulta offline 2.1.19
         shell: bash
         run: |
           python3 nosso-combinado/nc-offline-dashboard-v229.py android-v1
@@ -291,8 +291,11 @@ jobs:
           grep -q "versionName '2.1.19'" android-v1/app/build.gradle
           grep -q 'private void nfOwnerPicker(' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           grep -q 'private void nfSyncOffline(' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
-          grep -q 'private void nfMonthChart(' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           grep -q 'NF_MATRIX_KEY' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
+          if grep -q 'private void nfMonthChart(' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java; then
+            echo 'Erro: dashboard do Planejamento apareceu no Android'
+            exit 1
+          fi
           grep -q 'ncListEditWithPhotos' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           grep -q 'finance_matrix_payment_reverse' android-v1/app/src/main/java/com/nossocombinado/app/MainActivity.java
           test -s android-v1/app/src/main/res/raw/nc_alarm05.wav
