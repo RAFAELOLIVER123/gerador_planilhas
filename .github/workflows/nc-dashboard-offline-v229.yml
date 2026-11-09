@@ -1,4 +1,4 @@
-name: Nosso Combinado Nativo 2.1.19 - Dashboard Offline (Revisado)
+name: Nosso Combinado Nativo 2.1.19 - Filtro e Offline
 on:
   push:
     branches: [nosso-combinado-21-dashboard-offline-v229]
@@ -319,20 +319,20 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp android-v1/app/build/outputs/apk/debug/app-debug.apk dist/Nosso-Combinado-Nativo-2.1.19-Dashboard-Offline.apk
+          cp android-v1/app/build/outputs/apk/debug/app-debug.apk dist/Nosso-Combinado-Nativo-2.1.19-Filtro-Offline.apk
       - name: Publicar arquivo APK
         uses: actions/upload-artifact@v4
         with:
           name: Nosso-Combinado-Nativo-2.1.19-APK
-          path: dist/Nosso-Combinado-Nativo-2.1.19-Dashboard-Offline.apk
+          path: dist/Nosso-Combinado-Nativo-2.1.19-Filtro-Offline.apk
           if-no-files-found: error
       - name: Publicar versão para instalar no celular
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "nc-android-nativo-2.1.19" dist/Nosso-Combinado-Nativo-2.1.19-Dashboard-Offline.apk \
+          gh release create "nc-android-nativo-2.1.19" dist/Nosso-Combinado-Nativo-2.1.19-Filtro-Offline.apk \
             --repo "RAFAELOLIVER123/gerador_planilhas" \
             --target "nosso-combinado-21-dashboard-offline-v229" \
             --title "Nosso Combinado Nativo 2.1.19" \
-            --notes "Versão Android nativa 2.1.19: Financeiro e Planejamento mensal com filtro por responsável, painel de metas previsto versus pago, gráfico de receitas e despesas por mês, botão Baixar offline (dados de listas, lançamentos e 24 meses de planejamento). Consulta offline é somente leitura para financeiro, sem pagamentos ou estornos. Preserva listas com fotos, alarmes, chat e mapa. Assinatura de teste e instalação paralela." --prerelease
+            --notes "Versão Android nativa 2.1.19: Financeiro e Planejamento mensal com filtro por responsável e totais simples, botão Baixar offline (dados de listas, lançamentos e 24 meses de planejamento). Consulta offline é somente leitura para financeiro, sem pagamentos ou estornos. Preserva listas com fotos, alarmes, chat e mapa. Assinatura de teste e instalação paralela." --prerelease
