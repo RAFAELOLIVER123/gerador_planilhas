@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Android 2.1.19: dashboard nativo, seleção por responsável e consulta offline.
+"""Android 2.1.19: filtro por responsável e consulta offline; dashboard exclusivo da web.
 Sem modificar APIs, dados do servidor, agenda, chat, fotos ou alarmes existentes.
 """
 from pathlib import Path
@@ -16,7 +16,7 @@ def once(a,b,label):
     s=s.replace(a,b,1)
     print("OK",label)
 once("    private void toolCarousel(){",frag+"\n    private void toolCarousel(){",
-     "injetar cache financeiro, filtro de pessoa e dashboard")
+     "injetar cache financeiro e filtro de pessoa")
 # Cabeçalho: filtro e botão de baixar dados para consulta sem internet.
 anchor='''        content.addView(selector);gap(content,10);
         LinearLayout views=horizontal();'''
@@ -62,12 +62,6 @@ finreplace('''        nfLedger=data==null?new JSONObject():data;
 finreplace('''            if(!nfMonth.equals(nfCompetence(tx)))continue;''',
 '''            if(!nfMonth.equals(nfCompetence(tx))||!nfMatches(tx))continue;''',
 "filtrar lançamentos por responsável")
-finreplace('''        nfTotals(expIn,got,expOut,spent);
-        gap(content,12);''',
-'''        nfTotals(expIn,got,expOut,spent);
-        gap(content,9);
-        nfDashboardSummary(expIn,got,expOut,spent,"Execução do mês");
-        gap(content,11);''',"dashboard nativo para financeiro")
 s=s[:finance_start]+finance+s[finance_end:]
 # Matrix: restore last 24 months offline, including when server is down.
 load_start=s.index("    private void nfLoadMatrix(){")
@@ -115,7 +109,7 @@ updated_load=r'''    private void nfLoadMatrix(){
 '''
 s=s[:load_start]+updated_load+s[load_end:]
 print("OK", "cache de 24 meses por família e leitura offline do planejamento")
-# Matrix: filtering & dashboard + don't expose editable controls while disconnected.
+# Matrix: filtering only; dashboard remains exclusively on the website.
 matrix_start=s.index("    private void nfRenderMatrix(")
 matrix_end=s.index("    private void nfMatrixNewRow(",matrix_start)
 matrix=s[matrix_start:matrix_end]
@@ -137,15 +131,6 @@ matreplace('''            JSONObject r=row(rows,i),cell=selected.get(r.optLong("
 '''            JSONObject r=row(rows,i),cell=selected.get(r.optLong("id",0));
             if(cell==null||!nfMatches(r))continue;''',
 "totais do Planejamento por responsável")
-matreplace('''        nfTotals(in,recv,out,paid);gap(content,12);
-        text(content,"Lançamentos do mês",16,NAVY,true);''',
-'''        nfTotals(in,recv,out,paid);gap(content,9);
-        nfDashboardSummary(in,recv,out,paid,"Metas e pagamentos");
-        gap(content,9);
-        nfMonthChart(data);
-        gap(content,10);
-        text(content,"Lançamentos do mês",16,NAVY,true);''',
-"dashboard mensal do Planejamento")
 matreplace('''            JSONObject r=row(rows,i);
             long rowId=r.optLong("id",0);''',
 '''            JSONObject r=row(rows,i);
@@ -176,10 +161,11 @@ for old,new in [("versionCode 228","versionCode 229"),("versionName '2.1.18'","v
     g=g.replace(old,new,1)
 gradle.write_text(g,encoding="utf-8")
 main.write_text(s,encoding="utf-8")
-for method in ["nfOwnerPicker(","nfSyncOffline(","nfDashboardSummary(","nfMonthChart(","nfMatrixHasMonth(","nfRestoreOffline("]:
+for method in ["nfOwnerPicker(","nfSyncOffline(","nfMatrixHasMonth(","nfRestoreOffline("]:
     assert method in s
 assert s.count("private void nfLoadMatrix(){")==1
 assert s.count("private void nfFinanceView(")==1
-assert "ncListEditWithPhotos" in s and "ncMatrixRowMenu" in s
+assert "ncListEditWithPhotos" in s and "nfMatrixRowMenu" in s
 assert "finance_matrix_payment_reverse" in s
+assert "nfDashboardSummary(" not in s and "nfMonthChart(" not in s
 print("Android 2.1.19 preparado; servidor permanece como fonte de verdade.")
