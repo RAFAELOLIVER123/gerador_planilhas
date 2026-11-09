@@ -317,12 +317,12 @@
                 });
             };
             if(editing){
-                JSONObject update=withHid(data("id",String.valueOf(rowId),
+                JSONObject rowUpdate=withHid(data("id",String.valueOf(rowId),
                     "title",name,"direction",direction,"category",finalCategory,
                     "account_kind",NCP_KIND_CODES[kindIndex],"category_label",finalLabel,
                     "card_name",kindIndex==1?finalCard:"",
                     "subject_user_id",String.valueOf(finalAssigned),"sort_order",String.valueOf(order)));
-                api.post("finance_matrix_row_save",update,(saved,error)->{
+                api.post("finance_matrix_row_save",rowUpdate,(saved,error)->{
                     if(error!=null){save.setEnabled(true);msg("Dados não salvos: "+error);return;}
                     complete.run();
                 });
