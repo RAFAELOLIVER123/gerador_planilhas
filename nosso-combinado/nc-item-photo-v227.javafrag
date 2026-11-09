@@ -1,0 +1,178 @@
+
+    // Fotos por item de lista (exceto veículos). Chaves privadas isoladas por conta e família.
+    private boolean ncItemPhotosAllowed(JSONObject list){
+        if(list==null)return false;
+        String cat=val(list,"category").trim().toLowerCase(java.util.Locale.ROOT);
+        return !"vehicle".equals(cat) && !"vehicles".equals(cat) &&
+               !"fuel".equals(cat) && !"vehicles_fuel".equals(cat) &&
+               !"vehicle_fuel".equals(cat);
+    }
+    private String ncItemPhotoKey(JSONObject list,JSONObject item){
+        if(!ncItemPhotosAllowed(list)||item==null)return "";
+        long itemId=item.optLong("id",0),listId=list.optLong("id",0);
+        if(itemId<=0||listId<=0||householdId.isEmpty()||userId.isEmpty())return "";
+        try{
+            String raw=userId+"|"+householdId+"|"+listId+"|"+itemId;
+            byte[] digest=java.security.MessageDigest.getInstance("SHA-256")
+               .digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex=new StringBuilder("nci_");
+            for(byte b:digest){
+                int u=b&255;
+                hex.append("0123456789abcdef".charAt((u>>>4)&15));
+                hex.append("0123456789abcdef".charAt(u&15));
+            }
+            return hex.toString();
+        }catch(Exception error){return "";}
+    }
+    private org.json.JSONArray ncItemPhotos(String key){
+        if(key==null||key.isEmpty())return new org.json.JSONArray();
+        String raw=getSharedPreferences("nc_finance_photos",MODE_PRIVATE)
+                     .getString(key,"[]");
+        try {return new org.json.JSONArray(raw);}
+        catch(Exception ignored){return new org.json.JSONArray();}
+    }
+    private int ncItemPhotoCount(JSONObject list,JSONObject item){
+        return ncItemPhotos(ncItemPhotoKey(list,item)).length();
+    }
+    private void ncItemPhotoActions(JSONObject list,JSONObject item){
+        if(!ncItemPhotosAllowed(list))return;
+        final String key=ncItemPhotoKey(list,item);
+        if(key.isEmpty()){
+            msg("Salve o produto antes de adicionar fotos.");return;
+        }
+        int count=ncItemPhotos(key).length();
+        String[] options=count>0
+            ?new String[]{"📷 Tirar foto","🖼 Escolher da galeria",
+                 "👁 Ver / excluir fotos ("+count+")"}
+            :new String[]{"📷 Tirar foto","🖼 Escolher da galeria"};
+        new android.app.AlertDialog.Builder(this)
+          .setTitle("Fotos · "+val(item,"title"))
+          .setItems(options,(dialog,choice)->{
+              if(choice==0)ncProPhotoSelect(key,"camera");
+              else if(choice==1)ncProPhotoSelect(key,"gallery");
+              else ncProShowPhoto(key);
+          })
+          .setNegativeButton("Cancelar",null)
+          .show();
+    }
+    private android.widget.ImageView ncItemPhotoThumbnail(JSONObject list,JSONObject item){
+        if(!ncItemPhotosAllowed(list)||ncItemPhotoKey(list,item).isEmpty())return null;
+        android.widget.ImageView image=new android.widget.ImageView(this);
+        image.setBackground(shape(Color.rgb(238,243,251),9));
+        image.setClipToOutline(true);
+        image.setPadding(dp(3),dp(3),dp(3),dp(3));
+        org.json.JSONArray images=ncItemPhotos(ncItemPhotoKey(list,item));
+        boolean loaded=false;
+        if(images.length()>0){
+            String filename=images.optString(0,"");
+            java.io.File imageFile=new java.io.File(filename);
+            try{
+                java.io.File folder=new java.io.File(getFilesDir(),"nc_finance_receipts");
+                if(imageFile.isFile() && imageFile.getCanonicalPath().startsWith(
+                     folder.getCanonicalPath()+java.io.File.separator)){
+                    android.graphics.BitmapFactory.Options size=new android.graphics.BitmapFactory.Options();
+                    size.inJustDecodeBounds=true;
+                    android.graphics.BitmapFactory.decodeFile(filename,size);
+                    if(size.outWidth>0&&size.outHeight>0){
+                        android.graphics.BitmapFactory.Options opts=new android.graphics.BitmapFactory.Options();
+                        opts.inSampleSize=1;
+                        while(Math.max(size.outWidth/opts.inSampleSize,size.outHeight/opts.inSampleSize)>80)
+                            opts.inSampleSize*=2;
+                        android.graphics.Bitmap bitmap=android.graphics.BitmapFactory.decodeFile(filename,opts);
+                        if(bitmap!=null){
+                            image.setImageBitmap(bitmap);
+                            image.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+                            loaded=true;
+                        }
+                    }
+                }
+            }catch(Exception ignored){}
+        }
+        if(!loaded){
+            image.setImageResource(android.R.drawable.ic_menu_camera);
+            image.setColorFilter(NAVY);
+            image.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        }
+        int count=images.length();
+        image.setContentDescription(count>0?"Ver "+count+" foto(s) do item":"Adicionar foto ao item");
+        image.setOnClickListener(v->ncItemPhotoActions(list,item));
+        return image;
+    }
+    private void ncListEditWithPhotos(JSONObject list,JSONObject item){
+        LinearLayout form=vertical();
+        form.setPadding(dp(18),dp(7),dp(18),dp(8));
+        EditText product=ncFormInput(form,"Produto *","Nome do produto",val(item,"title"),false);
+        EditText quantity=ncFormInput(form,"Quantidade *","Ex.: 2",val(item,"quantity"),false);
+        quantity.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|
+           android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText unit=ncFormInput(form,"Unidade *","UN, KG, L, PCT",val(item,"unit"),false);
+        EditText price=ncFormInput(form,"Valor unitário (R$)","Ex.: 12,50",
+                    ncListNumber(ncListPrice(item)),false);
+        price.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|
+            android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText brand=ncFormInput(form,"Marca","Opcional",val(item,"brand"),false);
+        EditText store=ncFormInput(form,"Estabelecimento","Opcional",
+                                    val(item,"store_name"),false);
+        EditText notes=ncFormInput(form,"Observações","Detalhes do produto",
+                                      val(item,"notes"),true);
+        ncProSection(form,"📷","Fotos do produto","Galeria e câmera • até 6 fotos");
+        LinearLayout photoButtons=horizontal();
+        TextView camera=button("📷 Tirar foto",Color.rgb(229,239,254),NAVY,
+              ()->ncProPhotoSelect(ncItemPhotoKey(list,item),"camera"));
+        TextView gallery=button("🖼 Galeria",Color.rgb(231,243,232),NAVY,
+              ()->ncProPhotoSelect(ncItemPhotoKey(list,item),"gallery"));
+        photoButtons.addView(camera,new LinearLayout.LayoutParams(0,dp(45),1));
+        LinearLayout.LayoutParams gallerySize=new LinearLayout.LayoutParams(0,dp(45),1);
+        gallerySize.leftMargin=dp(6);
+        photoButtons.addView(gallery,gallerySize);
+        form.addView(photoButtons);
+        String currentKey=ncItemPhotoKey(list,item);
+        TextView view=button("👁 Ver / excluir fotos ("+ncItemPhotos(currentKey).length()+")",
+                            Color.rgb(245,246,250),NAVY,()->ncProShowPhoto(currentKey));
+        LinearLayout.LayoutParams viewSize=new LinearLayout.LayoutParams(-1,dp(44));
+        viewSize.topMargin=dp(7);
+        form.addView(view,viewSize);
+        text(form,"As fotos ficam salvas somente neste aparelho, não na lista compartilhada do site.",
+            11,MUTED,false);
+        android.widget.ScrollView scroll=new android.widget.ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.addView(form);
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this)
+            .setTitle("Editar produto")
+            .setView(scroll)
+            .setNegativeButton("Cancelar",null)
+            .setPositiveButton("Salvar alterações",null)
+            .create();
+        dialog.setOnShowListener(ignored->{
+            android.widget.Button save=dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE);
+            save.setOnClickListener(v->{
+                java.math.BigDecimal q=ncListDecimal(ncValue(quantity),null);
+                java.math.BigDecimal p=ncListDecimal(ncValue(price),null);
+                String name=ncValue(product),itemUnit=ncValue(unit);
+                if(name.isEmpty()||name.length()>180){
+                    product.setError("Informe um nome com até 180 caracteres.");return;
+                }
+                if(itemUnit.isEmpty()){unit.setError("Informe a unidade.");return;}
+                if(q==null||q.signum()<=0){quantity.setError("Quantidade inválida.");return;}
+                if(p==null||p.signum()<0){price.setError("Valor inválido.");return;}
+                if(!connected){msg("Conecte-se para salvar os dados do produto. As fotos permanecem neste celular.");return;}
+                JSONObject payload=withHid(data("id",val(item,"id"),"list_id",val(list,"id"),
+                    "title",name,"quantity",q.toPlainString(),"unit",itemUnit,
+                    "estimated_price",p.toPlainString(),"brand",ncValue(brand),
+                    "store_name",ncValue(store),"notes",ncValue(notes)));
+                if(ncListDone(item)){
+                    try{payload.put("paid_price",p.toPlainString());}catch(Exception ignored2){}
+                }
+                save.setEnabled(false);
+                api.post("list_item_save",payload,(response,error)->{
+                    save.setEnabled(true);
+                    if(error!=null){msg("Não foi possível editar o produto: "+error);return;}
+                    dialog.dismiss();
+                    msg("Produto atualizado.");
+                    loadPage(false);
+                });
+            });
+        });
+        dialog.show();
+        dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
