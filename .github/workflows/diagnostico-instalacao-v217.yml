@@ -1,0 +1,60 @@
+name: Diagnosticar instalação APK Nosso Combinado 2.1.17
+on:
+  push:
+    branches: [nosso-combinado-v217-install-test]
+    paths:
+      - '.github/workflows/diagnostico-instalacao-v217.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - name: Instalar Android Build Tools
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Baixar APK exato publicado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/apk"
+          gh release download nc-android-nativo-2.1.17 \
+            --repo "RAFAELOLIVER123/gerador_planilhas" \
+            --pattern 'Nosso-Combinado-Nativo-2.1.17-Fotos-Itens.apk' \
+            --dir "$RUNNER_TEMP/apk"
+          cp "$RUNNER_TEMP/apk/Nosso-Combinado-Nativo-2.1.17-Fotos-Itens.apk" "$RUNNER_TEMP/app.apk"
+          test "$(stat -c%s "$RUNNER_TEMP/app.apk")" -gt 1000000
+          sha256sum "$RUNNER_TEMP/app.apk"
+          ls -lh "$RUNNER_TEMP/app.apk"
+      - name: Assinatura, compatibilidade e formato
+        run: |
+          set -eux
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/app.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/app.apk" | grep -E 'package:|sdkVersion:|targetSdkVersion:|application-label:|native-code'
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$RUNNER_TEMP/app.apk"
+      - name: Instalar em Android 11 virtual e abrir
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb wait-for-device
+            adb shell getprop ro.build.version.release
+            adb install --no-incremental -r "$RUNNER_TEMP/app.apk"
+            adb shell pm path com.nossocombinado.app.mobile227
+            adb shell am start -n com.nossocombinado.app.mobile227/com.nossocombinado.app.MainActivity
+            sleep 3
+            adb shell dumpsys package com.nossocombinado.app.mobile227 | grep -E 'versionCode|targetSdk|Package \[' | head -15
+            echo 'INSTALACAO E ABERTURA CONCLUIDAS NO EMULADOR'
